@@ -164,6 +164,7 @@ export class ProductsService {
         id: true,
         name: true,
         description: true,
+        images: true,
       },
     });
 
@@ -176,6 +177,7 @@ export class ProductsService {
         ? Buffer.from(product.description, 'utf8').toString('hex')
         : null,
       images: product.images,
+      hexImages: product.images?.map((image) => Buffer.from(image, 'utf8').toString('hex')),
     }));
   }
 }
