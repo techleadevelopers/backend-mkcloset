@@ -8,6 +8,17 @@ import { Prisma } from '@prisma/client';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private normalizeProductText(product: Prisma.Product): Prisma.Product {
+    const decode = (value?: string | null) =>
+      value ? Buffer.from(value, 'latin1').toString('utf8') : value;
+
+    return {
+      ...product,
+      name: decode(product.name),
+      description: decode(product.description),
+    };
+  }
+
   async create(createProductDto: any): Promise<ProductEntity> {
     // Implemente a lógica de criação do produto aqui
     // Exemplo:
@@ -92,20 +103,17 @@ export class ProductsService {
       }
 
       // Se o produto tiver uma imagem e uma subpasta, constrói a URL completa
-      if (product.images && product.images.length > 0 && folderName) {
-        // CORREÇÃO: Usa 'product.images[0]' no lugar de 'product.imageUrl'
-        product.images[0] = `/images/${folderName}/${product.images[0]}`;
-      } else {
-        // Se não tiver imagem, defina um valor padrão ou null
-        // Depende de como seu front-end lida com a ausência de imagens
-      }
+      const imagesWithPath =
+        product.images && product.images.length > 0 && folderName
+          ? [`/images/${folderName}/${product.images[0]}`, ...product.images.slice(1)]
+          : product.images;
 
-      const normalizedProduct = {
-        ...product,
-        name: Buffer.from(product.name, 'latin1').toString('utf8'),
-      };
-
-      return new ProductEntity(normalizedProduct);
+      return new ProductEntity(
+        this.normalizeProductText({
+          ...product,
+          images: imagesWithPath,
+        }),
+      );
     });
 
     return productsWithCorrectPath;
@@ -119,10 +127,7 @@ export class ProductsService {
     });
 
     return featuredProducts.map((product) =>
-      new ProductEntity({
-        ...product,
-        name: Buffer.from(product.name, 'latin1').toString('utf8'),
-      }),
+      new ProductEntity(this.normalizeProductText(product)),
     );
   }
 
@@ -133,10 +138,7 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     }
 
-    return new ProductEntity({
-      ...product,
-      name: Buffer.from(product.name, 'latin1').toString('utf8'),
-    });
+    return new ProductEntity(this.normalizeProductText(product));
   }
 
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {

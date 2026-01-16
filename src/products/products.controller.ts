@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Header,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -23,16 +24,19 @@ export class ProductsController {
   }
 
   @Get()
+  @Header('Content-Type', 'application/json; charset=utf-8')
   findAll(@Query() query: ProductQueryDto) {
     return this.productsService.findAll(query);
   }
 
   @Get('featured')
+  @Header('Content-Type', 'application/json; charset=utf-8')
   findFeatured() {
     return this.productsService.findFeatured();
   }
 
   @Get(':id')
+  @Header('Content-Type', 'application/json; charset=utf-8')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
