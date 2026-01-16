@@ -2,20 +2,22 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ProductEntity } from './entities/product.entity';
 import { ProductQueryDto } from './dto/product-query.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, Product } from '@prisma/client';
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private normalizeProductText(product: Prisma.Product): Prisma.Product {
+  private normalizeProductText(product: Product): Product {
     const decode = (value?: string | null) =>
-      value ? Buffer.from(value, 'latin1').toString('utf8') : value;
+      value ? Buffer.from(value, 'binary').toString('utf8') : value;
 
     return {
       ...product,
-      name: decode(product.name),
+      name: decode(product.name)!,
       description: decode(product.description),
+      images:
+        product.images?.map((img) => decode(img) ?? img) ?? product.images,
     };
   }
 
@@ -103,17 +105,19 @@ export class ProductsService {
       }
 
       // Se o produto tiver uma imagem e uma subpasta, constrói a URL completa
+      const decodedProduct = this.normalizeProductText(product);
       const imagesWithPath =
-        product.images && product.images.length > 0 && folderName
-          ? [`/images/${folderName}/${product.images[0]}`, ...product.images.slice(1)]
-          : product.images;
+        decodedProduct.images && decodedProduct.images.length > 0 && folderName
+          ? [
+              `/images/${folderName}/${decodedProduct.images[0]}`,
+              ...decodedProduct.images.slice(1),
+            ]
+          : decodedProduct.images;
 
-      return new ProductEntity(
-        this.normalizeProductText({
-          ...product,
-          images: imagesWithPath,
-        }),
-      );
+      return new ProductEntity({
+        ...decodedProduct,
+        images: imagesWithPath,
+      });
     });
 
     return productsWithCorrectPath;
