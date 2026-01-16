@@ -1,0 +1,9 @@
+version: 2
+authtoken: 313ycnyTtlxLxsOkrGgYBZZAYkf_5tFyiHEioTQJNUsoAUKgZ # MUITO IMPORTANTE: Substitua por seu token real!
+tunnels:
+  frontend:
+    addr: 5173
+    proto: http
+  backend:
+    addr: 3000
+    proto: http

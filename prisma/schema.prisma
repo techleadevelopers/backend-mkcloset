@@ -1,0 +1,248 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // ou "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums para status de pedido e tipos de transação
+enum OrderStatus {
+  PENDING    // Aguardando pagamento
+  PAID       // Pagamento confirmado
+  PROCESSING // Em preparação/separação
+  SHIPPED    // Enviado
+  DELIVERED  // Entregue
+  CANCELLED  // Cancelado
+  REFUNDED   // Reembolsado
+}
+
+// NOVO: Enum para tipos de transação
+enum TransactionType {
+  PAYMENT    // Pagamento de um pedido
+  REFUND     // Reembolso de um pedido
+}
+
+// NOVO: Enum para papéis de usuário
+enum Role {
+  USER   // Usuário comum
+  ADMIN  // Administrador
+  // Você pode adicionar outros papéis aqui, como MANAGER, EDITOR, etc.
+}
+
+// Usuários
+model User {
+  id         String         @id @default(uuid())
+  email      String         @unique
+  password   String
+  name       String?
+  phone      String?
+  cpf        String?        // ADICIONADO: Campo CPF
+  role       Role           @default(USER) // NOVO: Campo para o papel do usuário
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  addresses  Address[]
+  orders     Order[]
+  cart       Cart?
+  wishlist   Wishlist?
+  transactions Transaction[]
+}
+
+// Endereços de Usuários
+model Address {
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id])
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String
+  zipCode      String
+  isDefault    Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Categorias de Produtos
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique // Para URLs amigáveis
+  description String?
+  imageUrl    String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Produtos
+model Product {
+  id            String         @id @default(uuid())
+  name          String
+  description   String?
+  price         Decimal        @db.Decimal(10, 2)
+  originalPrice Decimal?       @db.Decimal(10, 2)
+  images        String[]       @default([]) // Array de URLs de imagens
+  categoryId    String
+  category      Category       @relation(fields: [categoryId], references: [id])
+  sizes         String[]       @default([]) // Ex: ["P", "M", "G"]
+  colors        String[]       @default([]) // Ex: ["Vermelho", "Azul"]
+  isNew         Boolean        @default(false)
+  isFeatured    Boolean        @default(false)
+  discount      Int?           // Percentual de desconto
+  stock         Int            @default(0)
+  weight        Float?         // Peso em kg para frete
+  dimensions    Json?          // { length: Float, width: Float, height: Float } em cm
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+  orderItems    OrderItem[]
+}
+
+// Carrinho de Compras (um por usuário ou por convidado)
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String?  @unique // ALTERADO: userId agora é opcional para permitir carrinhos de convidados
+  user      User?    @relation(fields: [userId], references: [id]) // ALTERADO: Relacionamento com User agora é opcional
+  guestId   String?  @unique // Campo para identificar carrinhos de convidados, também opcional e único
+  items     CartItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Itens do Carrinho
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2) @default(0.00)
+  size      String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Wishlist (Lista de Desejos)
+model Wishlist {
+  id           String       @id @default(uuid())
+  userId       String       @unique // Relacionamento 1:1 com User
+  user         User         @relation(fields: [userId], references: [id])
+  items        WishlistItem[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+// Itens da Wishlist
+model WishlistItem {
+  id         String   @id @default(uuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Pedidos
+model Order {
+  id                      String    @id @default(uuid())
+  userId                  String?   // Tornar userId opcional
+  user                    User?     @relation(fields: [userId], references: [id]) // Tornar relacionamento opcional
+  guestId                 String?   // ID para identificar o convidado. Removida a restrição @unique
+  guestName               String?   // Nome do convidado
+  guestEmail              String?   // Email do convidado
+  guestPhone              String?   // Telefone do convidado
+  guestCpf                String?   // ADICIONADO: CPF do convidado
+
+  status                  OrderStatus @default(PENDING)
+  totalAmount             Decimal   @db.Decimal(10, 2)
+  shippingPrice           Decimal   @db.Decimal(10, 2)
+  shippingService         String
+
+  shippingAddressStreet       String
+  shippingAddressNumber       String
+  shippingAddressComplement   String?
+  shippingAddressNeighborhood String
+  shippingAddressCity         String
+  shippingAddressState        String
+  shippingAddressZipCode      String
+  paymentMethod               String
+  paymentDetails              Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  items                       OrderItem[]
+
+  transaction             Transaction?
+
+  couponId                String?
+  coupon                  Coupon?   @relation(fields: [couponId], references: [id])
+
+  @@index([userId])
+  @@index([guestId])
+}
+
+// Itens do Pedido
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+  size      String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// NOVO: Modelo para Transações Financeiras (para pagamentos de pedidos)
+model Transaction {
+  id                   String        @id @default(uuid())
+  userId               String?       // ALTERADO: Tornar userId opcional
+  user                 User?         @relation(fields: [userId], references: [id]) // ALTERADO: Relacionamento opcional
+  amount               Decimal       @db.Decimal(10, 2)
+  type                 TransactionType
+  status               String
+  description          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  order                Order?        @relation(fields: [orderId], references: [id])
+  orderId              String?       @unique
+
+  gatewayTransactionId String?
+  qrCodeUrl            String?
+  boletoUrl            String?       // ADICIONADO: Campo para URL do Boleto
+
+  transactionRef       String?
+  antifraudStatus      String?       // NOVO: Campo para o status da análise antifraude (ex: PENDING_REVIEW, ACCEPTED, DENIED)
+
+  couponId             String?
+  coupon               Coupon?       @relation(fields: [couponId], references: [id])
+}
+
+// NOVO: Modelo para Cupons de Desconto
+model Coupon {
+  id                 String        @id @default(uuid())
+  code               String        @unique
+  discountAmount     Decimal?      @db.Decimal(10, 2)
+  discountPercentage Int?
+  expirationDate     DateTime?
+  usageLimit         Int?
+  usedCount          Int           @default(0)
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  orders             Order[]
+  transactions       Transaction[]
+}
