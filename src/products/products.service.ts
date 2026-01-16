@@ -10,7 +10,7 @@ export class ProductsService {
 
   private normalizeProductText(product: Product): Product {
     const decode = (value?: string | null): string | null =>
-      value ? Buffer.from(value, 'binary').toString('utf8') : null;
+      value ? Buffer.from(value, 'latin1').toString('utf8') : null;
 
     return {
       ...product,
@@ -92,8 +92,9 @@ export class ProductsService {
 
     // CORRIGIDO: Lógica para construir o caminho completo da imagem
     const productsWithCorrectPath = products.map((product) => {
+      const normalizedProduct = this.normalizeProductText(product);
       let folderName = '';
-      const productName = product.name.toLowerCase();
+      const productName = normalizedProduct.name.toLowerCase();
 
       // Mapeia o nome do produto para a subpasta correspondente
       if (productName.includes('julia')) {
@@ -105,17 +106,16 @@ export class ProductsService {
       }
 
       // Se o produto tiver uma imagem e uma subpasta, constrói a URL completa
-      const decodedProduct = this.normalizeProductText(product);
       const imagesWithPath =
-        decodedProduct.images && decodedProduct.images.length > 0 && folderName
+        normalizedProduct.images && normalizedProduct.images.length > 0 && folderName
           ? [
-              `/images/${folderName}/${decodedProduct.images[0]}`,
-              ...decodedProduct.images.slice(1),
+              `/images/${folderName}/${normalizedProduct.images[0]}`,
+              ...normalizedProduct.images.slice(1),
             ]
-          : decodedProduct.images;
+          : normalizedProduct.images;
 
       return new ProductEntity({
-        ...decodedProduct,
+        ...normalizedProduct,
         images: imagesWithPath,
       });
     });
