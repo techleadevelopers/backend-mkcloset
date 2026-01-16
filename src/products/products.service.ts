@@ -9,8 +9,8 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private normalizeProductText(product: Product): Product {
-    const decode = (value?: string | null) =>
-      value ? Buffer.from(value, 'binary').toString('utf8') : value;
+    const decode = (value?: string | null): string | null =>
+      value ? Buffer.from(value, 'binary').toString('utf8') : null;
 
     return {
       ...product,
