@@ -2,17 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ProductEntity } from './entities/product.entity';
 import { ProductQueryDto } from './dto/product-query.dto';
-import { Prisma, Product } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createProductDto: any): Promise<ProductEntity> {
-    // Implemente a lógica de criação do produto aqui
-    // Exemplo:
-    // const newProduct = await this.prisma.product.create({ data: createProductDto });
-    // return new ProductEntity(newProduct);
     throw new Error('Método create ainda não implementado.');
   }
 
@@ -41,16 +37,12 @@ export class ProductsService {
 
     // Filtro por categoria
     if (categorySlug) {
-      where.category = {
-        is: {
-          slug: categorySlug,
-        },
-      };
+      where.category = { is: { slug: categorySlug } };
     } else if (categoryId) {
       where.categoryId = categoryId;
     }
 
-    // Filtro por cores e tamanhos usando 'hasSome'
+    // Filtro por cores e tamanhos
     if (colors) {
       const colorArray = colors.split(',');
       where.colors = { hasSome: colorArray };
@@ -62,36 +54,38 @@ export class ProductsService {
     }
 
     // Paginação
-    const take = limit || 10;
-    const skip = ((page || 1) - 1) * take;
+    const take = Number(limit) || 10;
+    const skip = ((Number(page) || 1) - 1) * take;
 
     // Ordenação
     const orderBy: Prisma.ProductOrderByWithRelationInput = sortBy
       ? { [sortBy]: sortOrder || 'asc' }
-      : { createdAt: 'desc' }; // Ordenação padrão
+      : { createdAt: 'desc' };
 
     const products = await this.prisma.product.findMany({
       where,
       orderBy,
       take,
       skip,
+      include: { category: true } // Importante para o frontend
     });
 
-    // CORRIGIDO: Lógica para construir o caminho completo da imagem
+    // Mantém sua lógica de construção de caminho de imagem
     const productsWithCorrectPath = products.map((product) => {
       let folderName = '';
       const productName = product.name.toLowerCase();
 
-      // Mapeia o nome do produto para a subpasta correspondente
+      // Mapeia o nome do produto para a subpasta (ajustado para aceitar nomes parciais se houver bug de acento)
       if (productName.includes('julia')) {
         folderName = 'conjunto-julia';
       } else if (productName.includes('glamour')) {
         folderName = 'conjunto-glamour';
       } else if (productName.includes('olivia')) {
         folderName = 'conjunto-olivia';
+      } else if (productName.includes('po')) { // Captura "Poá" mesmo se o banco enviar "Po "
+        folderName = 'conjunto-poa';
       }
 
-      // Se o produto tiver uma imagem e uma subpasta, constrói a URL completa
       const imagesWithPath =
         product.images && product.images.length > 0 && folderName
           ? [
@@ -111,16 +105,17 @@ export class ProductsService {
 
   async findFeatured(): Promise<ProductEntity[]> {
     const featuredProducts = await this.prisma.product.findMany({
-      where: {
-        isFeatured: true,
-      },
+      where: { isFeatured: true },
+      include: { category: true }
     });
-
     return featuredProducts.map((product) => new ProductEntity(product));
   }
 
   async findOne(id: string): Promise<ProductEntity> {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+    const product = await this.prisma.product.findUnique({ 
+      where: { id },
+      include: { category: true }
+    });
 
     if (!product) {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
@@ -130,13 +125,6 @@ export class ProductsService {
   }
 
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {
-    // Implemente a lógica de atualização do produto aqui
-    // Exemplo:
-    // const updatedProduct = await this.prisma.product.update({
-    //   where: { id },
-    //   data: updateProductDto,
-    // });
-    // return new ProductEntity(updatedProduct);
     throw new Error('Método update ainda não implementado.');
   }
 
@@ -150,5 +138,4 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     }
   }
-
 }
