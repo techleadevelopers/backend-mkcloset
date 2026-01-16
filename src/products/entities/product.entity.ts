@@ -7,7 +7,9 @@ interface ProductDimensions {
   height: number;
 }
 
-export class ProductEntity implements Omit<PrismaProduct, 'price' | 'originalPrice'> {
+export class ProductEntity
+  implements Omit<PrismaProduct, 'price' | 'originalPrice'>
+{
   id: string;
   name: string;
   description: string | null;
@@ -34,18 +36,28 @@ export class ProductEntity implements Omit<PrismaProduct, 'price' | 'originalPri
 
     // Converte os campos Decimal para number
     this.price = prismaProduct.price.toNumber();
-    this.originalPrice = prismaProduct.originalPrice ? prismaProduct.originalPrice.toNumber() : null;
+    this.originalPrice = prismaProduct.originalPrice
+      ? prismaProduct.originalPrice.toNumber()
+      : null;
   }
 
   // Método para obter dimensões tipadas
   getTypedDimensions(): ProductDimensions | null {
-    if (this.dimensions && typeof this.dimensions === 'object' && !Array.isArray(this.dimensions)) {
+    if (
+      this.dimensions &&
+      typeof this.dimensions === 'object' &&
+      !Array.isArray(this.dimensions)
+    ) {
       // Conversão para 'unknown' primeiro, depois para o tipo desejado.
       // Isso resolve o erro de conversão direta.
       const dims = this.dimensions as unknown as ProductDimensions;
-      
+
       // Validação adicional para garantir que as propriedades são números
-      if (typeof dims.length === 'number' && typeof dims.width === 'number' && typeof dims.height === 'number') {
+      if (
+        typeof dims.length === 'number' &&
+        typeof dims.width === 'number' &&
+        typeof dims.height === 'number'
+      ) {
         return dims;
       }
     }

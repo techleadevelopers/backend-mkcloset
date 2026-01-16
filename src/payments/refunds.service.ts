@@ -1,5 +1,11 @@
 // src/payments/refunds.service.ts
-import { Injectable, InternalServerErrorException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PagSeguroService } from './providers/pagseguro.service';
 import { TransactionType, OrderStatus, Prisma } from '@prisma/client'; // ADICIONADO: Importe 'Prisma' aqui
@@ -20,28 +26,40 @@ export class RefundsService {
     });
 
     if (!transaction) {
-      throw new NotFoundException(`Transação com ID "${transactionId}" não encontrada.`);
+      throw new NotFoundException(
+        `Transação com ID "${transactionId}" não encontrada.`,
+      );
     }
 
-    if (transaction.type !== TransactionType.PAYMENT || transaction.status !== 'PAID') {
-      throw new BadRequestException('Apenas transações de pagamento com status PAGO podem ser reembolsadas.');
+    if (
+      transaction.type !== TransactionType.PAYMENT ||
+      transaction.status !== 'PAID'
+    ) {
+      throw new BadRequestException(
+        'Apenas transações de pagamento com status PAGO podem ser reembolsadas.',
+      );
     }
 
     if (!transaction.gatewayTransactionId) {
-      throw new BadRequestException('ID da transação no gateway de pagamento ausente.');
+      throw new BadRequestException(
+        'ID da transação no gateway de pagamento ausente.',
+      );
     }
 
     // Validação de valor para reembolso parcial
     if (amount && amount > transaction.amount.toNumber()) {
-        throw new BadRequestException('O valor do reembolso não pode ser maior que o valor da transação original.');
+      throw new BadRequestException(
+        'O valor do reembolso não pode ser maior que o valor da transação original.',
+      );
     }
 
     try {
       // Chama o PagSeguroService para iniciar o reembolso
-      const pagSeguroRefundResponse = await this.pagSeguroService.initiateRefund(
-        transaction.gatewayTransactionId,
-        amount,
-      );
+      const pagSeguroRefundResponse =
+        await this.pagSeguroService.initiateRefund(
+          transaction.gatewayTransactionId,
+          amount,
+        );
 
       // Atualiza o status da transação e do pedido no banco de dados
       await this.prisma.$transaction(async (prisma) => {
@@ -56,18 +74,19 @@ export class RefundsService {
             type: TransactionType.REFUND,
             status: 'PROCESSING', // Ou o status que o PagSeguro retorna inicialmente para reembolso
             description: `Reembolso para Transação Original #${transaction.id}`,
-            gatewayTransactionId: pagSeguroRefundResponse.id || pagSeguroRefundResponse.charge_id, // ID do reembolso no PagSeguro
+            gatewayTransactionId:
+              pagSeguroRefundResponse.id || pagSeguroRefundResponse.charge_id, // ID do reembolso no PagSeguro
             transactionRef: pagSeguroRefundResponse.status, // Status do reembolso no PagSeguro
           },
         });
 
         // Atualiza o status da transação original (opcional, pode ser 'REFUNDED' ou 'PARTIALLY_REFUNDED')
         await prisma.transaction.update({
-            where: { id: transaction.id },
-            data: {
-                status: amount ? 'PARTIALLY_REFUNDED' : 'REFUNDED',
-                // Você pode adicionar um campo para linkar o ID do reembolso aqui
-            },
+          where: { id: transaction.id },
+          data: {
+            status: amount ? 'PARTIALLY_REFUNDED' : 'REFUNDED',
+            // Você pode adicionar um campo para linkar o ID do reembolso aqui
+          },
         });
 
         // Atualiza o status do pedido se for um reembolso total
@@ -79,16 +98,25 @@ export class RefundsService {
               data: { status: OrderStatus.REFUNDED },
             });
           } else {
-            this.logger.warn(`Transação ${transaction.id} não possui orderId associado. O status do pedido não será atualizado.`);
+            this.logger.warn(
+              `Transação ${transaction.id} não possui orderId associado. O status do pedido não será atualizado.`,
+            );
           }
         }
       });
 
-      this.logger.log(`Reembolso iniciado com sucesso para transação ${transactionId}.`);
-      return { message: 'Reembolso iniciado com sucesso.', details: pagSeguroRefundResponse };
-
+      this.logger.log(
+        `Reembolso iniciado com sucesso para transação ${transactionId}.`,
+      );
+      return {
+        message: 'Reembolso iniciado com sucesso.',
+        details: pagSeguroRefundResponse,
+      };
     } catch (error) {
-      this.logger.error(`Erro ao processar reembolso para transação ${transactionId}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Erro ao processar reembolso para transação ${transactionId}: ${error.message}`,
+        error.stack,
+      );
       throw new InternalServerErrorException('Falha ao processar reembolso.');
     }
   }

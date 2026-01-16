@@ -1,5 +1,10 @@
 // src/antifraud/antifraud.service.ts
-import { Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common'; // ADICIONADO: NotFoundException
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common'; // ADICIONADO: NotFoundException
 import { ConfigService } from 'src/config/config.service';
 import { PrismaService } from 'src/prisma/prisma.service'; // Para interagir com o DB (salvar status)
 import axios from 'axios';
@@ -40,20 +45,33 @@ export class AntifraudService {
     this.antifraudApiKey = this.configService.antifraudApiKey;
 
     if (!this.antifraudApiUrl || !this.antifraudApiKey) {
-      this.logger.warn('As credenciais da ferramenta antifraude não estão configuradas. A análise antifraude será simulada.');
+      this.logger.warn(
+        'As credenciais da ferramenta antifraude não estão configuradas. A análise antifraude será simulada.',
+      );
     }
   }
 
-  async analyzeTransaction(data: AnalyzeTransactionDto): Promise<{ status: AntifraudStatus; reason?: string }> {
-    this.logger.log(`Iniciando análise antifraude para o pedido ${data.orderId}`);
+  async analyzeTransaction(
+    data: AnalyzeTransactionDto,
+  ): Promise<{ status: AntifraudStatus; reason?: string }> {
+    this.logger.log(
+      `Iniciando análise antifraude para o pedido ${data.orderId}`,
+    );
 
     if (!this.antifraudApiUrl || !this.antifraudApiKey) {
-      this.logger.warn('Análise antifraude simulada: credenciais não configuradas.');
+      this.logger.warn(
+        'Análise antifraude simulada: credenciais não configuradas.',
+      );
       // Simulação para ambiente de desenvolvimento/teste
-      if (data.amount > 5000) { // Exemplo: valores altos sempre em revisão
-        return { status: 'PENDING_REVIEW', reason: 'Valor da transação muito alto (simulado).' };
+      if (data.amount > 5000) {
+        // Exemplo: valores altos sempre em revisão
+        return {
+          status: 'PENDING_REVIEW',
+          reason: 'Valor da transação muito alto (simulado).',
+        };
       }
-      if (data.customerCpf && data.customerCpf.startsWith('111')) { // Exemplo: CPF de teste suspeito
+      if (data.customerCpf && data.customerCpf.startsWith('111')) {
+        // Exemplo: CPF de teste suspeito
         return { status: 'DENIED', reason: 'CPF suspeito (simulado).' };
       }
       return { status: 'ACCEPTED', reason: 'Análise simulada: aprovado.' };
@@ -68,7 +86,7 @@ export class AntifraudService {
           email: data.customerEmail,
           cpf: data.customerCpf,
         },
-        items: data.items.map(item => ({
+        items: data.items.map((item) => ({
           id: item.productId,
           quantity: item.quantity,
           unit_price: item.price,
@@ -83,7 +101,7 @@ export class AntifraudService {
 
       const response = await axios.post(this.antifraudApiUrl, payload, {
         headers: {
-          'Authorization': `Bearer ${this.antifraudApiKey}`,
+          Authorization: `Bearer ${this.antifraudApiKey}`,
           'Content-Type': 'application/json',
         },
       });
@@ -109,28 +127,43 @@ export class AntifraudService {
           break;
       }
 
-      this.logger.log(`Análise antifraude para pedido ${data.orderId}: Status ${internalStatus}, Motivo: ${reason}`);
+      this.logger.log(
+        `Análise antifraude para pedido ${data.orderId}: Status ${internalStatus}, Motivo: ${reason}`,
+      );
       return { status: internalStatus, reason };
-
     } catch (error) {
-      this.logger.error(`Erro ao chamar ferramenta antifraude para o pedido ${data.orderId}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Erro ao chamar ferramenta antifraude para o pedido ${data.orderId}: ${error.message}`,
+        error.stack,
+      );
       if (axios.isAxiosError(error) && error.response) {
-        this.logger.error(`Dados do erro da API Antifraude: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(
+          `Dados do erro da API Antifraude: ${JSON.stringify(error.response.data)}`,
+        );
       }
       // Em caso de falha na comunicação com a ferramenta, pode-se definir um status padrão
       // ou lançar um erro, dependendo da política de segurança.
-      return { status: 'PENDING_REVIEW', reason: 'Falha na comunicação com o serviço antifraude.' };
+      return {
+        status: 'PENDING_REVIEW',
+        reason: 'Falha na comunicação com o serviço antifraude.',
+      };
     }
   }
 
   // Método para atualizar o status antifraude manualmente (usado pelo AdminController)
-  async updateAntifraudStatus(transactionId: string, newStatus: AntifraudStatus, reason?: string): Promise<any> {
+  async updateAntifraudStatus(
+    transactionId: string,
+    newStatus: AntifraudStatus,
+    reason?: string,
+  ): Promise<any> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
     });
 
     if (!transaction) {
-      throw new NotFoundException(`Transação com ID "${transactionId}" não encontrada.`);
+      throw new NotFoundException(
+        `Transação com ID "${transactionId}" não encontrada.`,
+      );
     }
 
     const updatedTransaction = await this.prisma.transaction.update({
@@ -144,7 +177,9 @@ export class AntifraudService {
     // Opcional: Se o status mudar para ACCEPTED ou DENIED, você pode querer
     // acionar ações adicionais (ex: liberar pedido, cancelar pedido).
     // Isso dependerá da sua lógica de negócio.
-    this.logger.log(`Status antifraude da transação ${transactionId} atualizado para ${newStatus} (motivo: ${reason || 'manual'}).`);
+    this.logger.log(
+      `Status antifraude da transação ${transactionId} atualizado para ${newStatus} (motivo: ${reason || 'manual'}).`,
+    );
 
     return updatedTransaction;
   }

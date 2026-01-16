@@ -1,5 +1,16 @@
 // src/cart/cart.controller.ts
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, BadRequestException, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  BadRequestException,
+  Query,
+} from '@nestjs/common';
 import { CartService } from './cart.service';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -26,7 +37,9 @@ export class CartController {
   @Get('guest')
   async getGuestCart(@Query('guestId') guestId?: string) {
     if (!guestId) {
-      throw new BadRequestException('ID de convidado ausente na query string para recuperar o carrinho de convidado.');
+      throw new BadRequestException(
+        'ID de convidado ausente na query string para recuperar o carrinho de convidado.',
+      );
     }
     return this.cartService.getCartForGuest(guestId);
   }
@@ -43,7 +56,9 @@ export class CartController {
     const guestId = addToCartDto.guestId; // Assumindo que AddToCartDto tem um campo guestId opcional
 
     if (!userId && !guestId) {
-      throw new BadRequestException('Identificador de carrinho ausente (ID de usuário ou ID de convidado).');
+      throw new BadRequestException(
+        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
+      );
     }
 
     // O serviço será responsável por criar/atualizar o carrinho com base em userId ou guestId
@@ -62,10 +77,17 @@ export class CartController {
   ) {
     const userId = user?.id;
     if (!userId && !guestId) {
-      throw new BadRequestException('Identificador de carrinho ausente (ID de usuário ou ID de convidado).');
+      throw new BadRequestException(
+        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
+      );
     }
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
-    return this.cartService.updateCartItemQuantity(userId, guestId, itemId, updateCartItemDto.quantity);
+    return this.cartService.updateCartItemQuantity(
+      userId,
+      guestId,
+      itemId,
+      updateCartItemDto.quantity,
+    );
   }
 
   // Remover item do carrinho (para usuários logados ou convidados)
@@ -79,7 +101,9 @@ export class CartController {
   ) {
     const userId = user?.id;
     if (!userId && !guestId) {
-      throw new BadRequestException('Identificador de carrinho ausente (ID de usuário ou ID de convidado).');
+      throw new BadRequestException(
+        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
+      );
     }
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
     return this.cartService.removeCartItem(userId, guestId, itemId);
@@ -96,7 +120,9 @@ export class CartController {
   ) {
     const userId = user?.id;
     if (!userId && !guestId) {
-      throw new BadRequestException('Identificador de carrinho ausente (ID de usuário ou ID de convidado).');
+      throw new BadRequestException(
+        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
+      );
     }
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
     return this.cartService.clearCart(userId, guestId);

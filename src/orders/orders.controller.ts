@@ -1,5 +1,14 @@
 // src/orders/orders.controller.ts
-import { Controller, Post, Body, Param, UseGuards, Get, Query, BadRequestException } from '@nestjs/common'; // NOVO: Adicionado Query e BadRequestException
+import {
+  Controller,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Get,
+  Query,
+  BadRequestException,
+} from '@nestjs/common'; // NOVO: Adicionado Query e BadRequestException
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
@@ -16,7 +25,10 @@ export class OrdersController {
 
   @Post()
   // MUDANÇA AQUI: createOrderDto vem primeiro, user? vem depois
-  async create(@Body() createOrderDto: CreateOrderDto, @CurrentUser() user?: User) {
+  async create(
+    @Body() createOrderDto: CreateOrderDto,
+    @CurrentUser() user?: User,
+  ) {
     // MUDANÇA AQUI: A ordem dos argumentos na chamada ao service foi ajustada
     return this.ordersService.create(createOrderDto, user?.id);
   }
@@ -48,7 +60,9 @@ export class OrdersController {
   ) {
     // É crucial que o guestId seja passado para validar se o convidado tem acesso ao pedido
     if (!guestId) {
-      throw new BadRequestException('O ID do convidado (guestId) é obrigatório para rastrear o pedido.');
+      throw new BadRequestException(
+        'O ID do convidado (guestId) é obrigatório para rastrear o pedido.',
+      );
     }
     return this.ordersService.findOneByGuestId(guestId, orderId);
   }

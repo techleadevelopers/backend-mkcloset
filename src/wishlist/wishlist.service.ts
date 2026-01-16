@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ProductsService } from 'src/products/products.service';
 import { Prisma } from '@prisma/client';
@@ -33,7 +37,9 @@ export class WishlistService {
   async addItemToWishlist(userId: string, productId: string) {
     const product = await this.productsService.findOne(productId);
     if (!product) {
-      throw new NotFoundException(`Produto com ID "${productId}" não encontrado.`);
+      throw new NotFoundException(
+        `Produto com ID "${productId}" não encontrado.`,
+      );
     }
 
     const wishlist = await this.getOrCreateWishlist(userId);
@@ -46,7 +52,9 @@ export class WishlistService {
     });
 
     if (existingWishlistItem) {
-      throw new ConflictException(`Produto com ID "${productId}" já está na sua wishlist.`);
+      throw new ConflictException(
+        `Produto com ID "${productId}" já está na sua wishlist.`,
+      );
     }
 
     return this.prisma.wishlistItem.create({
@@ -54,7 +62,9 @@ export class WishlistService {
         wishlistId: wishlist.id,
         productId,
       },
-      include: { wishlist: { include: { items: { include: { product: true } } } } },
+      include: {
+        wishlist: { include: { items: { include: { product: true } } } },
+      },
     });
   }
 
@@ -69,7 +79,9 @@ export class WishlistService {
     });
 
     if (!wishlistItem) {
-      throw new NotFoundException(`Produto com ID "${productId}" não encontrado na sua wishlist.`);
+      throw new NotFoundException(
+        `Produto com ID "${productId}" não encontrado na sua wishlist.`,
+      );
     }
 
     await this.prisma.wishlistItem.delete({ where: { id: wishlistItem.id } });

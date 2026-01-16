@@ -17,10 +17,20 @@ export class ProductsService {
   }
 
   async findAll(query: ProductQueryDto): Promise<ProductEntity[]> {
-    const { search, sortBy, sortOrder, categoryId, colors, sizes, page, limit } = query;
+    const {
+      search,
+      sortBy,
+      sortOrder,
+      categoryId,
+      categorySlug,
+      colors,
+      sizes,
+      page,
+      limit,
+    } = query;
 
     const where: Prisma.ProductWhereInput = {};
-    
+
     // Filtro por busca em nome e descrição
     if (search) {
       where.OR = [
@@ -30,7 +40,13 @@ export class ProductsService {
     }
 
     // Filtro por categoria
-    if (categoryId) {
+    if (categorySlug) {
+      where.category = {
+        is: {
+          slug: categorySlug,
+        },
+      };
+    } else if (categoryId) {
       where.categoryId = categoryId;
     }
 
@@ -62,7 +78,7 @@ export class ProductsService {
     });
 
     // CORRIGIDO: Lógica para construir o caminho completo da imagem
-    const productsWithCorrectPath = products.map(product => {
+    const productsWithCorrectPath = products.map((product) => {
       let folderName = '';
       const productName = product.name.toLowerCase();
 
@@ -97,7 +113,7 @@ export class ProductsService {
       },
     });
 
-    return featuredProducts.map(product => new ProductEntity(product));
+    return featuredProducts.map((product) => new ProductEntity(product));
   }
 
   async findOne(id: string): Promise<ProductEntity> {
@@ -123,7 +139,9 @@ export class ProductsService {
 
   async remove(id: string): Promise<ProductEntity> {
     try {
-      const removedProduct = await this.prisma.product.delete({ where: { id } });
+      const removedProduct = await this.prisma.product.delete({
+        where: { id },
+      });
       return new ProductEntity(removedProduct);
     } catch (error) {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);

@@ -1,11 +1,15 @@
 // src/cart/cart.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ProductsService } from 'src/products/products.service';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { Prisma } from '@prisma/client';
 // Importa o tipo Decimal diretamente do runtime do Prisma
-import { Decimal } from '@prisma/client/runtime/library'; 
+import { Decimal } from '@prisma/client/runtime/library';
 
 // 1. Define um type alias para o tipo de payload do carrinho com os detalhes necessários
 type CartWithDetails = Prisma.CartGetPayload<{
@@ -67,7 +71,10 @@ export class CartService {
 
   // Método auxiliar privado para obter ou criar um carrinho (para usuário ou convidado)
   // Retorna Promise<CartWithDetails> para garantir o tipo
-  private async _getOrCreateCart(userId?: string, guestId?: string): Promise<CartWithDetails> {
+  private async _getOrCreateCart(
+    userId?: string,
+    guestId?: string,
+  ): Promise<CartWithDetails> {
     const commonInclude = {
       items: {
         include: {
@@ -103,11 +110,13 @@ export class CartService {
         });
       }
     } else {
-      throw new BadRequestException('Nenhum identificador de usuário ou convidado fornecido.');
+      throw new BadRequestException(
+        'Nenhum identificador de usuário ou convidado fornecido.',
+      );
     }
 
     // Como garantimos que 'cart' será preenchido ou criado, não precisamos de 'as' aqui
-    return cart; 
+    return cart;
   }
 
   async getCartForUser(userId: string) {
@@ -120,16 +129,24 @@ export class CartService {
     return this.calculateCartTotals(cart);
   }
 
-  async addItemToCart(addToCartDto: AddToCartDto, userId?: string, guestId?: string) {
+  async addItemToCart(
+    addToCartDto: AddToCartDto,
+    userId?: string,
+    guestId?: string,
+  ) {
     const { productId, quantity, size, color } = addToCartDto;
 
     const product = await this.productsService.findOne(productId);
     if (!product) {
-      throw new NotFoundException(`Produto com ID "${productId}" não encontrado.`);
+      throw new NotFoundException(
+        `Produto com ID "${productId}" não encontrado.`,
+      );
     }
 
     if (product.stock < quantity) {
-      throw new BadRequestException(`Estoque insuficiente para o produto "${product.name}". Disponível: ${product.stock}`);
+      throw new BadRequestException(
+        `Estoque insuficiente para o produto "${product.name}". Disponível: ${product.stock}`,
+      );
     }
 
     const cart = await this._getOrCreateCart(userId, guestId);
@@ -148,57 +165,70 @@ export class CartService {
     if (existingCartItem) {
       const newQuantity = existingCartItem.quantity + quantity;
       if (product.stock < newQuantity) {
-        throw new BadRequestException(`Estoque insuficiente para o produto "${product.name}". Tentando adicionar ${quantity}, mas já tem ${existingCartItem.quantity}. Total: ${newQuantity}, Disponível: ${product.stock}`);
+        throw new BadRequestException(
+          `Estoque insuficiente para o produto "${product.name}". Tentando adicionar ${quantity}, mas já tem ${existingCartItem.quantity}. Total: ${newQuantity}, Disponível: ${product.stock}`,
+        );
       }
       // Acessa diretamente a propriedade 'cart' do resultado da atualização
-      resultCart = (await this.prisma.cartItem.update({
-        where: { id: existingCartItem.id },
-        data: { quantity: newQuantity },
-        include: {
-          cart: { // Inclui o carrinho para ter todos os dados necessários
-            include: {
-              items: {
-                include: {
-                  product: {
-                    select: this.productSelect,
+      resultCart = (
+        await this.prisma.cartItem.update({
+          where: { id: existingCartItem.id },
+          data: { quantity: newQuantity },
+          include: {
+            cart: {
+              // Inclui o carrinho para ter todos os dados necessários
+              include: {
+                items: {
+                  include: {
+                    product: {
+                      select: this.productSelect,
+                    },
                   },
                 },
               },
             },
           },
-        },
-      })).cart;
+        })
+      ).cart;
     } else {
       // Acessa diretamente a propriedade 'cart' do resultado da criação
-      resultCart = (await this.prisma.cartItem.create({
-        data: {
-          cartId: cart.id,
-          productId,
-          quantity,
-          size,
-          color,
-          price: product.price,
-        },
-        include: {
-          cart: { // Inclui o carrinho para ter todos os dados necessários
-            include: {
-              items: {
-                include: {
-                  product: {
-                    select: this.productSelect,
+      resultCart = (
+        await this.prisma.cartItem.create({
+          data: {
+            cartId: cart.id,
+            productId,
+            quantity,
+            size,
+            color,
+            price: product.price,
+          },
+          include: {
+            cart: {
+              // Inclui o carrinho para ter todos os dados necessários
+              include: {
+                items: {
+                  include: {
+                    product: {
+                      select: this.productSelect,
+                    },
                   },
                 },
               },
             },
           },
-        }
-      })).cart;
+        })
+      ).cart;
     }
 
     return this.calculateCartTotals(resultCart); // Passa o carrinho com o tipo correto
   }
 
-  async updateCartItemQuantity(userId: string | undefined, guestId: string | undefined, itemId: string, quantity: number) {
+  async updateCartItemQuantity(
+    userId: string | undefined,
+    guestId: string | undefined,
+    itemId: string,
+    quantity: number,
+  ) {
     if (quantity <= 0) {
       return this.removeCartItem(userId, guestId, itemId);
     }
@@ -215,18 +245,23 @@ export class CartService {
     });
 
     if (!cartItem) {
-      throw new NotFoundException(`Item do carrinho com ID "${itemId}" não encontrado no carrinho atual.`);
+      throw new NotFoundException(
+        `Item do carrinho com ID "${itemId}" não encontrado no carrinho atual.`,
+      );
     }
 
     if (cartItem.product.stock < quantity) {
-      throw new BadRequestException(`Estoque insuficiente para o produto "${cartItem.product.name}". Disponível: ${cartItem.product.stock}`);
+      throw new BadRequestException(
+        `Estoque insuficiente para o produto "${cartItem.product.name}". Disponível: ${cartItem.product.stock}`,
+      );
     }
 
     const updatedCartItem = await this.prisma.cartItem.update({
       where: { id: itemId },
       data: { quantity },
       include: {
-        cart: { // Inclui o carrinho para ter todos os dados necessários
+        cart: {
+          // Inclui o carrinho para ter todos os dados necessários
           include: {
             items: {
               include: {
@@ -243,7 +278,11 @@ export class CartService {
     return this.calculateCartTotals(updatedCartItem.cart); // Passa o carrinho com o tipo correto
   }
 
-  async removeCartItem(userId: string | undefined, guestId: string | undefined, itemId: string) {
+  async removeCartItem(
+    userId: string | undefined,
+    guestId: string | undefined,
+    itemId: string,
+  ) {
     const cart = await this._getOrCreateCart(userId, guestId);
 
     const cartItem = await this.prisma.cartItem.findUnique({
@@ -251,7 +290,9 @@ export class CartService {
     });
 
     if (!cartItem) {
-      throw new NotFoundException(`Item do carrinho com ID "${itemId}" não encontrado no carrinho atual.`);
+      throw new NotFoundException(
+        `Item do carrinho com ID "${itemId}" não encontrado no carrinho atual.`,
+      );
     }
 
     await this.prisma.cartItem.delete({ where: { id: itemId } });
@@ -271,7 +312,9 @@ export class CartService {
 
     // É importante lidar com o caso de updatedCart ser null, embora improvável após deleteMany
     if (!updatedCart) {
-        throw new NotFoundException('Carrinho não encontrado após remoção do item.');
+      throw new NotFoundException(
+        'Carrinho não encontrado após remoção do item.',
+      );
     }
 
     return this.calculateCartTotals(updatedCart); // Passa o carrinho com o tipo correto
@@ -297,7 +340,7 @@ export class CartService {
 
     // É importante lidar com o caso de updatedCart ser null
     if (!updatedCart) {
-        throw new NotFoundException('Carrinho não encontrado após limpeza.');
+      throw new NotFoundException('Carrinho não encontrado após limpeza.');
     }
 
     return this.calculateCartTotals(updatedCart); // Passa o carrinho com o tipo correto
@@ -307,7 +350,7 @@ export class CartService {
   private calculateCartTotals(cart: CartWithDetails) {
     const total = cart.items.reduce((sum, item) => {
       // Usa o tipo Decimal importado para garantir a tipagem correta
-      const itemPrice = (item.product.price as Decimal).toNumber(); 
+      const itemPrice = item.product.price.toNumber();
       return sum + itemPrice * item.quantity;
     }, 0);
     const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);

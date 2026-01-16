@@ -1,5 +1,13 @@
 // src/admin/admin.controller.ts
-import { Controller, Post, Param, Body, UseGuards, Patch, Get } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Param,
+  Body,
+  UseGuards,
+  Patch,
+  Get,
+} from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -31,7 +39,10 @@ export class AdminController {
     @Param('transactionId') transactionId: string,
     @Body() initiateRefundDto: InitiateRefundDto,
   ) {
-    return this.adminService.processRefund(transactionId, initiateRefundDto.amount);
+    return this.adminService.processRefund(
+      transactionId,
+      initiateRefundDto.amount,
+    );
   }
 
   @Patch('antifraud/transactions/:transactionId/status')

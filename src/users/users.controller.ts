@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -28,14 +37,20 @@ export class UsersController {
   // Atualizar perfil do usuário logado
   @UseGuards(JwtAuthGuard)
   @Patch('me')
-  updateProfile(@CurrentUser() user: User, @Body() updateUserDto: UpdateUserDto) {
+  updateProfile(
+    @CurrentUser() user: User,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
     return this.usersService.update(user.id, updateUserDto);
   }
 
   // Gerenciar endereços do usuário logado
   @UseGuards(JwtAuthGuard)
   @Post('me/addresses')
-  addAddress(@CurrentUser() user: User, @Body() createAddressDto: CreateAddressDto) {
+  addAddress(
+    @CurrentUser() user: User,
+    @Body() createAddressDto: CreateAddressDto,
+  ) {
     return this.usersService.addAddress(user.id, createAddressDto);
   }
 

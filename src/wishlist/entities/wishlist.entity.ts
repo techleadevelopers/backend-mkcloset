@@ -1,4 +1,8 @@
-import { Wishlist as PrismaWishlist, WishlistItem as PrismaWishlistItem, Product as PrismaProduct } from '@prisma/client';
+import {
+  Wishlist as PrismaWishlist,
+  WishlistItem as PrismaWishlistItem,
+  Product as PrismaProduct,
+} from '@prisma/client';
 
 export class WishlistItemEntity implements PrismaWishlistItem {
   id: string;

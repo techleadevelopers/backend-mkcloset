@@ -1,4 +1,14 @@
-import { Controller, Post, Body, UseGuards, Param, BadRequestException, Logger, Req, Headers } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Param,
+  BadRequestException,
+  Logger,
+  Req,
+  Headers,
+} from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
@@ -25,7 +35,10 @@ export class PaymentsController {
     @CurrentUser() user: User | undefined,
     @Param('orderId') orderId: string,
   ) {
-    return this.paymentsService.initiatePagSeguroRedirectCheckout(user?.id, orderId);
+    return this.paymentsService.initiatePagSeguroRedirectCheckout(
+      user?.id,
+      orderId,
+    );
   }
 
   // NOVO ENDPOINT: para criar cobrança PIX
@@ -38,7 +51,9 @@ export class PaymentsController {
   ) {
     const userId = user?.id || body.guestId; // NOVO: Obtém o ID do usuário autenticado, ou o guestId do corpo da requisição
     if (!userId) {
-      throw new BadRequestException('Usuário ou ID de convidado não fornecido.');
+      throw new BadRequestException(
+        'Usuário ou ID de convidado não fornecido.',
+      );
     }
     return this.paymentsService.createPixCharge(orderId, userId);
   }
@@ -53,28 +68,42 @@ export class PaymentsController {
   ) {
     const userId = user?.id; // Para pagamentos com cartão, geralmente é um usuário logado ou o guestId é parte do DTO
     // Se o guestId for necessário e não vier do token, ele deve ser incluído no processPaymentDto
-    return this.paymentsService.processCreditCardPayment(orderId, userId, processPaymentDto);
+    return this.paymentsService.processCreditCardPayment(
+      orderId,
+      userId,
+      processPaymentDto,
+    );
   }
 
   @Post('webhook/pagseguro')
   async handlePagSeguroWebhook(
     @Body() payload: any,
     @Headers('x-pagseguro-signature') signature: string, // NOVO: Captura o cabeçalho de assinatura
-    @Req() req: Request // AQUI É ONDE O ERRO OCORRIA
+    @Req() req: Request, // AQUI É ONDE O ERRO OCORRIA
   ) {
     this.logger.log('Webhook do PagSeguro recebido.');
     const pagSeguroCheckoutId = payload.id || payload.checkout_id;
 
     if (!pagSeguroCheckoutId) {
-      this.logger.error('Payload do webhook PagSeguro inválido: ID do checkout ausente.');
-      throw new BadRequestException('Payload do webhook PagSeguro inválido: ID do checkout ausente.');
+      this.logger.error(
+        'Payload do webhook PagSeguro inválido: ID do checkout ausente.',
+      );
+      throw new BadRequestException(
+        'Payload do webhook PagSeguro inválido: ID do checkout ausente.',
+      );
     }
-    
+
     // Fazendo um casting de 'req' para 'any' para acessar 'rawBody'.
     // Idealmente, você estenderia a interface 'Request' do Express em um arquivo de declaração global (.d.ts)
     // para incluir 'rawBody' de forma type-safe.
-    const rawBody = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(payload);
+    const rawBody = (req as any).rawBody
+      ? (req as any).rawBody.toString('utf8')
+      : JSON.stringify(payload);
 
-    return this.paymentsService.handlePagSeguroNotification(pagSeguroCheckoutId, signature, rawBody);
+    return this.paymentsService.handlePagSeguroNotification(
+      pagSeguroCheckoutId,
+      signature,
+      rawBody,
+    );
   }
 }

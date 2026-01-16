@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ProductsService } from 'src/products/products.service';
 
@@ -16,7 +20,9 @@ export class InventoryService {
 
   async updateStock(productId: string, quantity: number) {
     if (quantity < 0) {
-      throw new BadRequestException('A quantidade de estoque não pode ser negativa.');
+      throw new BadRequestException(
+        'A quantidade de estoque não pode ser negativa.',
+      );
     }
 
     const product = await this.productsService.findOne(productId);
@@ -34,7 +40,9 @@ export class InventoryService {
   async decrementStock(productId: string, quantity: number) {
     const product = await this.productsService.findOne(productId);
     if (product.stock < quantity) {
-      throw new BadRequestException(`Estoque insuficiente para o produto "${product.name}". Disponível: ${product.stock}, solicitado: ${quantity}.`);
+      throw new BadRequestException(
+        `Estoque insuficiente para o produto "${product.name}". Disponível: ${product.stock}, solicitado: ${quantity}.`,
+      );
     }
     return this.prisma.product.update({
       where: { id: productId },

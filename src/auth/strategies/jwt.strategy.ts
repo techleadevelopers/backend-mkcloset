@@ -14,7 +14,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     const jwtSecret = configService.get<string>('JWT_SECRET');
     if (!jwtSecret) {
-      throw new Error('JWT_SECRET não está definido nas variáveis de ambiente.');
+      throw new Error(
+        'JWT_SECRET não está definido nas variáveis de ambiente.',
+      );
     }
 
     super({
@@ -25,13 +27,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   // O tipo de retorno foi alterado para corresponder ao método findOne
-  async validate(payload: { sub: string; email: string }): Promise<Omit<User, 'password'>> {
+  async validate(payload: {
+    sub: string;
+    email: string;
+  }): Promise<Omit<User, 'password'>> {
     const user = await this.usersService.findOne(payload.sub);
-    
+
     if (!user) {
       throw new UnauthorizedException();
     }
-    
+
     return user;
   }
 }

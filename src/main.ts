@@ -20,7 +20,7 @@ async function bootstrap() {
     const allowedOrigins = [
       'http://localhost:5173',
       'https://e1688003a97e.ngrok-free.app',
-      'https://www.bymkcloset.com.br'
+      'https://www.bymkcloset.com.br',
     ];
 
     app.enableCors({
@@ -69,7 +69,9 @@ async function bootstrap() {
     const port = configService.get<number>('PORT') || 3001;
     await app.listen(port, '0.0.0.0');
 
-    console.log(`Aplicação iniciada com sucesso. Acesse: ${await app.getUrl()}`);
+    console.log(
+      `Aplicação iniciada com sucesso. Acesse: ${await app.getUrl()}`,
+    );
   } catch (error) {
     console.error('Erro fatal durante a inicialização da aplicação:', error);
     process.exit(1);

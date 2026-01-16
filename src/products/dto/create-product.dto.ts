@@ -1,4 +1,16 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional, IsUrl, IsArray, ArrayMinSize, IsInt, Min, IsJSON, ValidateNested } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsUrl,
+  IsArray,
+  ArrayMinSize,
+  IsInt,
+  Min,
+  IsJSON,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer'; // Importado class-transformer
 
 class DimensionsDto {

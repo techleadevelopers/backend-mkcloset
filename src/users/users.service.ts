@@ -19,14 +19,20 @@ export class UsersService {
 
     // NOVO: Enviar e-mail de boas-vindas
     try {
-        // CORREÇÃO AQUI: Garante que newUser.name seja uma string, usando '' como fallback se for null/undefined
-        await this.notificationsService.sendWelcomeEmail(newUser.email, newUser.name || '');
+      // CORREÇÃO AQUI: Garante que newUser.name seja uma string, usando '' como fallback se for null/undefined
+      await this.notificationsService.sendWelcomeEmail(
+        newUser.email,
+        newUser.name || '',
+      );
     } catch (emailError) {
-        // Certifique-se de que emailError.message existe antes de acessá-lo.
-        // Se emailError for um tipo 'unknown', você pode precisar de uma verificação de tipo mais robusta.
-        const errorMessage = emailError instanceof Error ? emailError.message : String(emailError);
-        this.notificationsService.logger.error(`Falha ao enviar e-mail de boas-vindas para ${newUser.email}: ${errorMessage}`);
-        // Não relança o erro para não impedir a criação do usuário
+      // Certifique-se de que emailError.message existe antes de acessá-lo.
+      // Se emailError for um tipo 'unknown', você pode precisar de uma verificação de tipo mais robusta.
+      const errorMessage =
+        emailError instanceof Error ? emailError.message : String(emailError);
+      this.notificationsService.logger.error(
+        `Falha ao enviar e-mail de boas-vindas para ${newUser.email}: ${errorMessage}`,
+      );
+      // Não relança o erro para não impedir a criação do usuário
     }
 
     return newUser;

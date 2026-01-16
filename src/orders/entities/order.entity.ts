@@ -1,6 +1,12 @@
 // src/orders/entities/order.entity.ts
 
-import { Order as PrismaOrder, OrderItem as PrismaOrderItem, OrderStatus, Product as PrismaProduct, Prisma } from '@prisma/client';
+import {
+  Order as PrismaOrder,
+  OrderItem as PrismaOrderItem,
+  OrderStatus,
+  Product as PrismaProduct,
+  Prisma,
+} from '@prisma/client';
 
 // Entidade para o item do pedido
 export class OrderItemEntity implements PrismaOrderItem {
@@ -8,9 +14,9 @@ export class OrderItemEntity implements PrismaOrderItem {
   orderId: string;
   productId: string;
   quantity: number;
-  
+
   price: Prisma.Decimal;
-  
+
   size: string | null;
   color: string | null;
   createdAt: Date;
@@ -22,7 +28,7 @@ export class OrderItemEntity implements PrismaOrderItem {
 export class OrderEntity implements PrismaOrder {
   id: string;
   userId: string | null;
-  
+
   // NOVOS CAMPOS PARA GUEST CHECKOUT
   guestId: string | null;
   guestName: string | null;
@@ -31,7 +37,7 @@ export class OrderEntity implements PrismaOrder {
   guestCpf: string | null; // ADICIONADO: Propriedade guestCpf
 
   status: OrderStatus;
-  
+
   totalAmount: Prisma.Decimal;
   shippingPrice: Prisma.Decimal;
   shippingService: string;

@@ -18,7 +18,13 @@ export class InventoryController {
 
   // @Roles('admin') // Exemplo de proteção por função
   @Patch(':productId/stock')
-  async updateStock(@Param('productId') productId: string, @Body() updateStockDto: UpdateStockDto) {
-    return this.inventoryService.updateStock(productId, updateStockDto.quantity);
+  async updateStock(
+    @Param('productId') productId: string,
+    @Body() updateStockDto: UpdateStockDto,
+  ) {
+    return this.inventoryService.updateStock(
+      productId,
+      updateStockDto.quantity,
+    );
   }
 }

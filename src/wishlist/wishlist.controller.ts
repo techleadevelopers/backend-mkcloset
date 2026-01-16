@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
 import { AddToWishlistDto } from './dto/add-to-wishlist.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -16,12 +24,21 @@ export class WishlistController {
   }
 
   @Post('items')
-  async addItemToWishlist(@CurrentUser() user: User, @Body() addToWishlistDto: AddToWishlistDto) {
-    return this.wishlistService.addItemToWishlist(user.id, addToWishlistDto.productId);
+  async addItemToWishlist(
+    @CurrentUser() user: User,
+    @Body() addToWishlistDto: AddToWishlistDto,
+  ) {
+    return this.wishlistService.addItemToWishlist(
+      user.id,
+      addToWishlistDto.productId,
+    );
   }
 
   @Delete('items/:productId')
-  async removeItemFromWishlist(@CurrentUser() user: User, @Param('productId') productId: string) {
+  async removeItemFromWishlist(
+    @CurrentUser() user: User,
+    @Param('productId') productId: string,
+  ) {
     return this.wishlistService.removeItemFromWishlist(user.id, productId);
   }
 }

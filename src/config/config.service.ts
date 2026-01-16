@@ -26,27 +26,40 @@ export class ConfigService {
     return this.nestConfigService.get<string>('CORREIOS_API_URL') || '';
   }
 
+  get backendUrl(): string {
+    return this.nestConfigService.get<string>('BACKEND_URL') || '';
+  }
+
   // --- Configurações do PagSeguro ---
   get pagSeguroApiUrl(): string {
-    return this.nestConfigService.get<string>('PAGSEGURO_API_URL') || 'https://api.pagseguro.com';
+    return (
+      this.nestConfigService.get<string>('PAGSEGURO_API_URL') ||
+      'https://api.pagseguro.com'
+    );
   }
 
   get pagSeguroApiToken(): string {
     const token = this.nestConfigService.get<string>('PAGSEGURO_API_TOKEN');
     if (!token) {
-        throw new InternalServerErrorException('A variável de ambiente PAGSEGURO_API_TOKEN não está definida.');
+      throw new InternalServerErrorException(
+        'A variável de ambiente PAGSEGURO_API_TOKEN não está definida.',
+      );
     }
     return token;
   }
 
   // NOVO: Segredo para verificação de assinatura de webhook do PagSeguro
   get pagSeguroWebhookSecret(): string {
-    const secret = this.nestConfigService.get<string>('PAGSEGURO_WEBHOOK_SECRET');
+    const secret = this.nestConfigService.get<string>(
+      'PAGSEGURO_WEBHOOK_SECRET',
+    );
     if (!secret) {
-        // Em ambiente de produção, considere lançar um erro ou ter um valor padrão seguro.
-        // Para desenvolvimento, um log de aviso pode ser suficiente.
-        console.warn('A variável de ambiente PAGSEGURO_WEBHOOK_SECRET não está definida. Webhooks podem não ser verificados.');
-        return 'your-default-webhook-secret-for-dev'; // Apenas para desenvolvimento
+      console.warn(
+        'A variável PAGSEGURO_WEBHOOK_SECRET não está definida. Webhooks ficam expostos a falsificações.',
+      );
+      throw new InternalServerErrorException(
+        'A variável de ambiente PAGSEGURO_WEBHOOK_SECRET é obrigatória para garantir a validade das notificações.',
+      );
     }
     return secret;
   }
@@ -70,7 +83,10 @@ export class ConfigService {
   }
 
   get emailServiceFrom(): string {
-    return this.nestConfigService.get<string>('EMAIL_SERVICE_FROM') || 'no-reply@yourdomain.com';
+    return (
+      this.nestConfigService.get<string>('EMAIL_SERVICE_FROM') ||
+      'no-reply@yourdomain.com'
+    );
   }
   // -----------------------------------
 

@@ -1,4 +1,13 @@
-import { IsNotEmpty, IsString, IsArray, ValidateNested, IsNumber, Min, IsOptional, IsInt } from 'class-validator'; // Adicionado IsInt
+import {
+  IsNotEmpty,
+  IsString,
+  IsArray,
+  ValidateNested,
+  IsNumber,
+  Min,
+  IsOptional,
+  IsInt,
+} from 'class-validator'; // Adicionado IsInt
 import { Type } from 'class-transformer'; // Importado class-transformer
 
 class ProductDimensionsDto {

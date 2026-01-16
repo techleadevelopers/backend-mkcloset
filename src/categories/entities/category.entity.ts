@@ -20,7 +20,7 @@ export class CategoryEntity implements PrismaCategory {
 
   @ApiProperty()
   createdAt: Date;
-  
+
   @ApiProperty()
   updatedAt: Date;
 

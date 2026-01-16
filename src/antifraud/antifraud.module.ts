@@ -9,9 +9,7 @@ import { PrismaModule } from 'src/prisma/prisma.module';
     ConfigModule, // Necessário se AntifraudService usar ConfigService
     PrismaModule, // Necessário se AntifraudService usar PrismaService
   ],
-  providers: [
-    AntifraudService,
-  ],
+  providers: [AntifraudService],
   exports: [
     AntifraudService, // Exporta para outros módulos, como PaymentsModule
   ],

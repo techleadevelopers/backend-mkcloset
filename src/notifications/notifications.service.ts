@@ -1,5 +1,9 @@
 // src/notifications/notifications.service.ts
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from 'src/config/config.service'; // Importe o ConfigService
 import * as nodemailer from 'nodemailer'; // Instale: npm install nodemailer
 import Mail from 'nodemailer/lib/mailer';
@@ -21,7 +25,12 @@ export class NotificationsService {
     });
   }
 
-  private async sendEmail(to: string, subject: string, html: string, text?: string): Promise<void> {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string,
+  ): Promise<void> {
     const mailOptions = {
       from: this.configService.emailServiceFrom,
       to,
@@ -32,10 +41,17 @@ export class NotificationsService {
 
     try {
       await this.transporter.sendMail(mailOptions);
-      this.logger.log(`E-mail enviado com sucesso para ${to}. Assunto: ${subject}`);
+      this.logger.log(
+        `E-mail enviado com sucesso para ${to}. Assunto: ${subject}`,
+      );
     } catch (error) {
-      this.logger.error(`Falha ao enviar e-mail para ${to}. Assunto: ${subject}. Erro: ${error.message}`, error.stack);
-      throw new InternalServerErrorException('Falha ao enviar e-mail de notificação.');
+      this.logger.error(
+        `Falha ao enviar e-mail para ${to}. Assunto: ${subject}. Erro: ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException(
+        'Falha ao enviar e-mail de notificação.',
+      );
     }
   }
 
@@ -51,7 +67,11 @@ export class NotificationsService {
     await this.sendEmail(to, subject, html);
   }
 
-  async sendOrderConfirmationEmail(to: string, orderId: string, totalAmount: number): Promise<void> {
+  async sendOrderConfirmationEmail(
+    to: string,
+    orderId: string,
+    totalAmount: number,
+  ): Promise<void> {
     const subject = `Confirmação de Pedido #${orderId} - MKCloset`;
     const html = `
       <p>Olá,</p>
@@ -64,7 +84,11 @@ export class NotificationsService {
     await this.sendEmail(to, subject, html);
   }
 
-  async sendPaymentConfirmationEmail(to: string, orderId: string, totalAmount: number): Promise<void> {
+  async sendPaymentConfirmationEmail(
+    to: string,
+    orderId: string,
+    totalAmount: number,
+  ): Promise<void> {
     const subject = `Pagamento Aprovado para o Pedido #${orderId} - MKCloset`;
     const html = `
       <p>Olá,</p>
@@ -76,7 +100,10 @@ export class NotificationsService {
     await this.sendEmail(to, subject, html);
   }
 
-  async sendPaymentCancellationEmail(to: string, orderId: string): Promise<void> {
+  async sendPaymentCancellationEmail(
+    to: string,
+    orderId: string,
+  ): Promise<void> {
     const subject = `Cancelamento do Pagamento do Pedido #${orderId} - MKCloset`;
     const html = `
       <p>Olá,</p>

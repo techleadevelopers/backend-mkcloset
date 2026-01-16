@@ -24,7 +24,10 @@ export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
     if (err) {
       // Opcional: Você pode logar o erro para fins de depuração,
       // mas é importante não relançá-lo para manter o comportamento opcional do guarda.
-      console.warn('OptionalJwtAuthGuard: Erro na validação do token (não fatal, requisição prossegue):', err);
+      console.warn(
+        'OptionalJwtAuthGuard: Erro na validação do token (não fatal, requisição prossegue):',
+        err,
+      );
       return null;
     }
 

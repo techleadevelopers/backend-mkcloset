@@ -5,7 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsNumber, 
+  IsNumber,
   IsBoolean,
   ValidateNested,
   IsEmail,
@@ -29,7 +29,7 @@ export class GuestContactInfoDto {
   @IsPhoneNumber('BR') // Assumindo formato de telefone brasileiro
   @IsOptional()
   phone?: string;
-  
+
   // NOVO: Adicionado campo CPF para pagamentos.
   @IsString()
   @IsOptional()
@@ -86,7 +86,7 @@ export class CreateOrderDto {
 
   @IsUUID()
   @IsOptional()
-  shippingAddressId?: string; 
+  shippingAddressId?: string;
 
   @IsUUID()
   @IsOptional()
@@ -101,7 +101,7 @@ export class CreateOrderDto {
   @Type(() => GuestShippingAddressDto)
   @IsOptional()
   guestShippingAddress?: GuestShippingAddressDto;
-  
+
   // NOVO: Adicionado os campos para criar conta do convidado
   @IsBoolean()
   @IsOptional()

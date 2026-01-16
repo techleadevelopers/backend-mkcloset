@@ -11,13 +11,11 @@ import { AntifraudModule } from 'src/antifraud/antifraud.module';
 @Module({
   imports: [
     PrismaModule,
-    PaymentsModule,  // Importa PagSeguroService e PaymentsService
-    OrdersModule,    // Importa OrdersService
+    PaymentsModule, // Importa PagSeguroService e PaymentsService
+    OrdersModule, // Importa OrdersService
     AntifraudModule, // Importa AntifraudService
   ],
-  controllers: [
-    AdminController,
-  ],
+  controllers: [AdminController],
   providers: [
     AdminService,
     RefundsService, // Mantém como provider local para evitar problemas de injeção

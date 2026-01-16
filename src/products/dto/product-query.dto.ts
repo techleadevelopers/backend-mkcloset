@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNumber, IsIn, IsPositive, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsIn,
+  IsPositive,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ProductQueryDto {
@@ -9,6 +16,10 @@ export class ProductQueryDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  categorySlug?: string;
 
   @IsOptional()
   @IsString()
