@@ -100,7 +100,12 @@ export class ProductsService {
         // Depende de como seu front-end lida com a ausência de imagens
       }
 
-      return new ProductEntity(product);
+      const normalizedProduct = {
+        ...product,
+        name: Buffer.from(product.name, 'latin1').toString('utf8'),
+      };
+
+      return new ProductEntity(normalizedProduct);
     });
 
     return productsWithCorrectPath;
@@ -113,7 +118,12 @@ export class ProductsService {
       },
     });
 
-    return featuredProducts.map((product) => new ProductEntity(product));
+    return featuredProducts.map((product) =>
+      new ProductEntity({
+        ...product,
+        name: Buffer.from(product.name, 'latin1').toString('utf8'),
+      }),
+    );
   }
 
   async findOne(id: string): Promise<ProductEntity> {
@@ -123,7 +133,10 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     }
 
-    return new ProductEntity(product);
+    return new ProductEntity({
+      ...product,
+      name: Buffer.from(product.name, 'latin1').toString('utf8'),
+    });
   }
 
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {
