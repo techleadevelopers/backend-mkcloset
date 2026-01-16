@@ -88,9 +88,8 @@ export class ProductsService {
     if (!product) throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     return new ProductEntity(product);
   }
-
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {
-    throw new Error('Método update ainda não implementado.');
+    throw new Error('Método update ainda não foi implementado.');
   }
 
   async remove(id: string): Promise<ProductEntity> {
