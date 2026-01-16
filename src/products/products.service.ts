@@ -9,16 +9,7 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private normalizeProductText(product: Product): Product {
-    const decode = (value?: string | null): string | null =>
-      value ? Buffer.from(value, 'latin1').toString('utf8') : null;
-
-    return {
-      ...product,
-      name: decode(product.name)!,
-      description: decode(product.description),
-      images:
-        product.images?.map((img) => decode(img) ?? img) ?? product.images,
-    };
+    return product;
   }
 
   async create(createProductDto: any): Promise<ProductEntity> {
