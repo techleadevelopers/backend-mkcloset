@@ -157,4 +157,25 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     }
   }
+
+  async getEncodingDiagnostics() {
+    const products = await this.prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        description: true,
+      },
+    });
+
+    return products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      hexName: Buffer.from(product.name, 'utf8').toString('hex'),
+      description: product.description,
+      hexDescription: product.description
+        ? Buffer.from(product.description, 'utf8').toString('hex')
+        : null,
+      images: product.images,
+    }));
+  }
 }

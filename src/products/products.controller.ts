@@ -41,6 +41,12 @@ export class ProductsController {
     return this.productsService.findOne(id);
   }
 
+  @Get('debug/encoding')
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  getEncodingDiagnostics() {
+    return this.productsService.getEncodingDiagnostics();
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
     return this.productsService.update(id, updateProductDto);
