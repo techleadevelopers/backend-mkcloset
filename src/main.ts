@@ -6,11 +6,22 @@ import { json } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as process from 'process';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule, {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    });
+    const distPath = join(__dirname, '..', '..', 'client', 'dist');
+    app.useStaticAssets(distPath);
+    app.get('*', (req, res, next) => {
+      if (!req.path.startsWith('/api')) {
+        res.sendFile(join(distPath, 'index.html'));
+      } else {
+        next();
+      }
     });
 
     // 1. Adicione esta linha para definir o prefixo global da API
