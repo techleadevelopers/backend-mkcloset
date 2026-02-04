@@ -27,7 +27,6 @@ class UpdateAntifraudStatusDto {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard) // Protege todas as rotas do admin
-@Roles(Role.ADMIN) // Apenas usuários com a role ADMIN podem acessar
 @Controller('admin')
 export class AdminController {
   constructor(
@@ -35,6 +34,7 @@ export class AdminController {
   ) {}
 
   @Post('refunds/:transactionId')
+  @Roles(Role.ADMIN) // Somente administradores podem iniciar reembolsos
   async initiateRefund(
     @Param('transactionId') transactionId: string,
     @Body() initiateRefundDto: InitiateRefundDto,
@@ -46,6 +46,7 @@ export class AdminController {
   }
 
   @Patch('antifraud/transactions/:transactionId/status')
+  @Roles(Role.ADMIN) // Somente administradores podem alterar status antifraude
   async updateAntifraudStatus(
     @Param('transactionId') transactionId: string,
     @Body() updateAntifraudStatusDto: UpdateAntifraudStatusDto,
@@ -58,8 +59,15 @@ export class AdminController {
   }
 
   @Get('orders')
+  @Roles(Role.ADMIN, Role.CLIENT_VIEW) // Administradores e clientes convidados podem ler pedidos
   async getAllOrders() {
     return this.adminService.getAllOrdersForAdmin();
+  }
+
+  @Get('payment-logs')
+  @Roles(Role.ADMIN, Role.CLIENT_VIEW) // Logs de pagamento apenas para leitura
+  async listPaymentLogs() {
+    return this.adminService.getTransactionLogs();
   }
 
   // Outros endpoints administrativos podem ser adicionados aqui
