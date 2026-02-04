@@ -30,6 +30,38 @@ export class ConfigService {
     return this.nestConfigService.get<string>('BACKEND_URL') || '';
   }
 
+  get frontendUrl(): string {
+    return this.nestConfigService.get<string>('FRONTEND_URL') || '';
+  }
+
+  get defaultShopSlug(): string {
+    return this.nestConfigService.get<string>('SHOP_SLUG') || 'mkcloset';
+  }
+
+  get facebookAppId(): string {
+    const value = this.nestConfigService.get<string>('FACEBOOK_APP_ID');
+    if (!value) {
+      throw new InternalServerErrorException('FACEBOOK_APP_ID não está configurado.');
+    }
+    return value;
+  }
+
+  get facebookAppSecret(): string {
+    const value = this.nestConfigService.get<string>('FACEBOOK_APP_SECRET');
+    if (!value) {
+      throw new InternalServerErrorException('FACEBOOK_APP_SECRET não está configurado.');
+    }
+    return value;
+  }
+
+  get facebookRedirectUri(): string {
+    const value = this.nestConfigService.get<string>('FACEBOOK_REDIRECT_URI');
+    if (!value) {
+      throw new InternalServerErrorException('FACEBOOK_REDIRECT_URI não está configurado.');
+    }
+    return value;
+  }
+
   // --- Configurações do PagSeguro ---
   get pagSeguroApiUrl(): string {
     return (
