@@ -24,6 +24,10 @@ export class RolesGuard implements CanActivate {
     // Obtém o usuário da requisição (assumindo que o JwtAuthGuard já injetou o usuário)
     const { user } = context.switchToHttp().getRequest();
 
+    if (!user || !user.role) {
+      return false;
+    }
+
     // Verifica se o usuário possui algum dos papéis necessários
     // Assumindo que o objeto user tem uma propriedade 'role' (ex: user.role: Role)
     // Se o usuário puder ter múltiplos papéis, 'user.roles: Role[]', ajuste a lógica.
