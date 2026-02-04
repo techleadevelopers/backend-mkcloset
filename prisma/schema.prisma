@@ -246,3 +246,18 @@ model Coupon {
   orders             Order[]
   transactions       Transaction[]
 }
+
+model InstagramIntegration {
+  id          String   @id @default(uuid())
+  shopSlug    String   @unique
+  userId      String?
+  accessToken String
+  tokenType   String?
+  scope       String?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  facebookPageId String?
+  facebookPageName String?
+  instagramBusinessAccountId String?
+}
