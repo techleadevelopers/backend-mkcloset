@@ -77,13 +77,89 @@ export class AdminService {
     // Se ordersService.findAllByUserId(undefined) retorna todos os pedidos, mantenha.
     // Caso contrário, você precisaria criar um método findAllOrders no OrdersService.
     const allOrders = await this.prisma.order.findMany({
-      include: {
-        user: true,
-        items: { include: { product: true } },
+      select: {
+        id: true,
+        userId: true,
+        guestId: true,
+        guestName: true,
+        guestEmail: true,
+        guestPhone: true,
+        status: true,
+        totalAmount: true,
+        shippingPrice: true,
+        shippingService: true,
+        paymentMethod: true,
+        createdAt: true,
+        updatedAt: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                images: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
     return allOrders;
+  }
+
+  /**
+   * Retorna logs de pagamento e transações sem expor tokens sensíveis.
+   * Limitado a leitura para ADMIN e CLIENT_VIEW.
+   */
+  async getTransactionLogs(limit = 100) {
+    const transactions = await this.prisma.transaction.findMany({
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        order: {
+          select: {
+            id: true,
+            status: true,
+            totalAmount: true,
+            paymentMethod: true,
+            createdAt: true,
+          },
+        },
+        user: {
+          select: { id: true, email: true, name: true },
+        },
+      },
+    });
+
+    return transactions.map((transaction) => ({
+      id: transaction.id,
+      orderId: transaction.orderId,
+      status: transaction.status,
+      type: transaction.type,
+      amount: transaction.amount.toNumber(),
+      description: transaction.description,
+      antifraudStatus: transaction.antifraudStatus,
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt,
+      orderStatus: transaction.order?.status,
+      paymentMethod: transaction.order?.paymentMethod,
+      customer: transaction.user
+        ? {
+            id: transaction.user.id,
+            email: transaction.user.email,
+            name: transaction.user.name,
+          }
+        : null,
+    }));
   }
 
   // Você pode adicionar mais métodos aqui para outras funcionalidades administrativas
