@@ -70,8 +70,17 @@ export class ProductsService {
       include: { category: true } // Importante para o frontend
     });
 
-    // Mantém sua lógica de construção de caminho de imagem
+    // Mantém lógica antiga, mas evita sobrescrever URLs absolutas (Cloudinary)
     const productsWithCorrectPath = products.map((product) => {
+      const images = Array.isArray(product.images) ? product.images : [];
+      const hasAbsoluteImages =
+        images.length > 0 &&
+        images.every((img) => typeof img === 'string' && img.startsWith('http'));
+
+      if (hasAbsoluteImages) {
+        return new ProductEntity(product);
+      }
+
       let folderName = '';
       const productName = product.name.toLowerCase();
 
@@ -87,12 +96,9 @@ export class ProductsService {
       }
 
       const imagesWithPath =
-        product.images && product.images.length > 0 && folderName
-          ? [
-              `/images/${folderName}/${product.images[0]}`,
-              ...product.images.slice(1),
-            ]
-          : product.images;
+        images.length > 0 && folderName
+          ? [`/images/${folderName}/${images[0]}`, ...images.slice(1)]
+          : images;
 
       return new ProductEntity({
         ...product,
