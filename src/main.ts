@@ -8,7 +8,6 @@ import * as process from 'process';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
-import { Express } from 'express';
 
 async function bootstrap() {
   try {
@@ -17,7 +16,7 @@ async function bootstrap() {
     });
     const distPath = join(__dirname, '..', '..', 'client', 'dist');
     app.useStaticAssets(distPath);
-    const server = app.getHttpAdapter().getInstance<Express>();
+    const server = app.getHttpAdapter().getInstance();
     server.get('*', (req, res, next) => {
       if (!req.path.startsWith('/api')) {
         res.sendFile(join(distPath, 'index.html'));
