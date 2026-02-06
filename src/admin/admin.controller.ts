@@ -59,13 +59,13 @@ export class AdminController {
   }
 
   @Get('orders')
-  @Roles(Role.ADMIN, Role.CLIENT_VIEW) // Administradores e clientes convidados podem ler pedidos
+  @Roles(Role.ADMIN) // Apenas administradores
   async getAllOrders() {
     return this.adminService.getAllOrdersForAdmin();
   }
 
   @Get('payment-logs')
-  @Roles(Role.ADMIN, Role.CLIENT_VIEW) // Logs de pagamento apenas para leitura
+  @Roles(Role.ADMIN) // Logs de pagamento apenas para ADMIN
   async listPaymentLogs() {
     return this.adminService.getTransactionLogs();
   }
