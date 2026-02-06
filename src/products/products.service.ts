@@ -33,9 +33,13 @@ export class ProductsService {
       limit,
     } = query;
 
-    const where: Prisma.ProductWhereInput = {
-      stock: { gt: 0 },
-    };
+    const includeAll = query.includeAll === 'true';
+
+    const where: Prisma.ProductWhereInput = includeAll
+      ? {}
+      : {
+          stock: { gt: 0 },
+        };
 
     if (search) {
       where.OR = [
