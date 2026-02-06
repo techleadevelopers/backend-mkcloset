@@ -33,7 +33,9 @@ export class ProductsService {
       limit,
     } = query;
 
-    const where: Prisma.ProductWhereInput = {};
+    const where: Prisma.ProductWhereInput = {
+      stock: { gt: 0 },
+    };
 
     if (search) {
       where.OR = [
@@ -99,7 +101,28 @@ export class ProductsService {
   }
 
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {
-    throw new Error('Método update ainda não implementado.');
+    const data: Prisma.ProductUpdateInput = { ...updateProductDto };
+
+    if (updateProductDto?.stock !== undefined) {
+      const stock = Math.max(0, Number(updateProductDto.stock) || 0);
+      data.stock = stock;
+    }
+
+    if (updateProductDto?.price !== undefined) {
+      const price = Number(updateProductDto.price);
+      if (!Number.isFinite(price)) {
+        throw new Error('Preço inválido.');
+      }
+      data.price = price;
+    }
+
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data,
+      include: { category: true },
+    });
+
+    return this.formatProduct(updated);
   }
 
   async remove(id: string): Promise<ProductEntity> {
