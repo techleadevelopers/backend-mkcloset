@@ -50,4 +50,8 @@ export class ProductQueryDto {
   @IsNumber()
   @IsPositive()
   limit?: number = 10;
+
+  @IsOptional()
+  @IsString()
+  includeAll?: string;
 }
