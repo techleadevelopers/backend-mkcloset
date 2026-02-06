@@ -17,7 +17,7 @@ async function bootstrap() {
     const distPath = join(__dirname, '..', '..', 'client', 'dist');
     app.useStaticAssets(distPath);
     const server = app.getHttpAdapter().getInstance();
-    server.get('*', (req, res, next) => {
+    server.get('/*', (req, res, next) => {
       if (!req.path.startsWith('/api')) {
         res.sendFile(join(distPath, 'index.html'));
       } else {
