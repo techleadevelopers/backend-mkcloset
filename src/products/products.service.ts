@@ -8,6 +8,14 @@ import { Prisma } from '@prisma/client';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Função centralizada para não repetir lógica de tratamento em cada método
+  private formatProduct(product: any): ProductEntity {
+    // Se no banco a imagem já for completa (Cloudinary/HTTP), enviamos ela pura.
+    // Se for um path relativo que você quer manter, o banco já deve trazer o path certo.
+    // Removemos aquele if/else de 'julia', 'glamour', etc.
+    return new ProductEntity(product);
+  }
+
   async create(createProductDto: any): Promise<ProductEntity> {
     throw new Error('Método create ainda não implementado.');
   }
@@ -27,7 +35,6 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {};
 
-    // Filtro por busca em nome e descrição
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -35,14 +42,12 @@ export class ProductsService {
       ];
     }
 
-    // Filtro por categoria
     if (categorySlug) {
       where.category = { is: { slug: categorySlug } };
     } else if (categoryId) {
       where.categoryId = categoryId;
     }
 
-    // Filtro por cores e tamanhos
     if (colors) {
       const colorArray = colors.split(',');
       where.colors = { hasSome: colorArray };
@@ -53,11 +58,9 @@ export class ProductsService {
       where.sizes = { hasSome: sizeArray };
     }
 
-    // Paginação
     const take = Number(limit) || 10;
     const skip = ((Number(page) || 1) - 1) * take;
 
-    // Ordenação
     const orderBy: Prisma.ProductOrderByWithRelationInput = sortBy
       ? { [sortBy]: sortOrder || 'asc' }
       : { createdAt: 'desc' };
@@ -67,46 +70,11 @@ export class ProductsService {
       orderBy,
       take,
       skip,
-      include: { category: true } // Importante para o frontend
+      include: { category: true }
     });
 
-    // Mantém lógica antiga, mas evita sobrescrever URLs absolutas (Cloudinary)
-    const productsWithCorrectPath = products.map((product) => {
-      const images = Array.isArray(product.images) ? product.images : [];
-      const hasAbsoluteImages =
-        images.length > 0 &&
-        images.every((img) => typeof img === 'string' && img.startsWith('http'));
-
-      if (hasAbsoluteImages) {
-        return new ProductEntity(product);
-      }
-
-      let folderName = '';
-      const productName = product.name.toLowerCase();
-
-      // Mapeia o nome do produto para a subpasta (ajustado para aceitar nomes parciais se houver bug de acento)
-      if (productName.includes('julia')) {
-        folderName = 'conjunto-julia';
-      } else if (productName.includes('glamour')) {
-        folderName = 'conjunto-glamour';
-      } else if (productName.includes('olivia')) {
-        folderName = 'conjunto-olivia';
-      } else if (productName.includes('po')) { // Captura "Poá" mesmo se o banco enviar "Po "
-        folderName = 'conjunto-poa';
-      }
-
-      const imagesWithPath =
-        images.length > 0 && folderName
-          ? [`/images/${folderName}/${images[0]}`, ...images.slice(1)]
-          : images;
-
-      return new ProductEntity({
-        ...product,
-        images: imagesWithPath,
-      });
-    });
-
-    return productsWithCorrectPath;
+    // MAPEAMENTO LIMPO: Apenas converte para Entity sem injetar strings fixas
+    return products.map((product) => this.formatProduct(product));
   }
 
   async findFeatured(): Promise<ProductEntity[]> {
@@ -114,7 +82,7 @@ export class ProductsService {
       where: { isFeatured: true },
       include: { category: true }
     });
-    return featuredProducts.map((product) => new ProductEntity(product));
+    return featuredProducts.map((product) => this.formatProduct(product));
   }
 
   async findOne(id: string): Promise<ProductEntity> {
@@ -127,7 +95,7 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
     }
 
-    return new ProductEntity(product);
+    return this.formatProduct(product);
   }
 
   async update(id: string, updateProductDto: any): Promise<ProductEntity> {
