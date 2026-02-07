@@ -36,6 +36,7 @@ async function bootstrap() {
         'http://localhost:5173',
         'http://localhost:5174',
         'http://127.0.0.1:5173',
+        'https://mk-closet-pdhq9mbtd-d3v-techle4ds-projects.vercel.app',
         'http://127.0.0.1:5174',
         'https://e1688003a97e.ngrok-free.app',
         'https://www.bymkcloset.com.br',
@@ -56,7 +57,7 @@ async function bootstrap() {
           ) {
             return callback(null, true);
           }
-          const msg = `A política CORS para este site não permite acesso da origem especificada: ${origin}.`;
+          const msg = `A polï¿½tica CORS para este site nï¿½o permite acesso da origem especificada: ${origin}.`;
           return callback(new Error(msg), false);
         }
         return callback(null, true);
@@ -83,24 +84,24 @@ async function bootstrap() {
 
     const swaggerConfig = new DocumentBuilder()
       .setTitle('API Mkcloset')
-      .setDescription('Documentação da API da Mkcloset')
+      .setDescription('Documentaï¿½ï¿½o da API da Mkcloset')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-    // 2. Alinhe a documentação do Swagger para a raiz do prefixo global
-    // Isso fará com que ela seja acessível em /api
+    // 2. Alinhe a documentaï¿½ï¿½o do Swagger para a raiz do prefixo global
+    // Isso farï¿½ com que ela seja acessï¿½vel em /api
     SwaggerModule.setup('', app, document);
 
     const port = configService.get<number>('PORT') || 3001;
     await app.listen(port, '0.0.0.0');
 
     console.log(
-      `Aplicação iniciada com sucesso. Acesse: ${await app.getUrl()}`,
+      `Aplicaï¿½ï¿½o iniciada com sucesso. Acesse: ${await app.getUrl()}`,
     );
   } catch (error) {
-    console.error('Erro fatal durante a inicialização da aplicação:', error);
+    console.error('Erro fatal durante a inicializaï¿½ï¿½o da aplicaï¿½ï¿½o:', error);
     process.exit(1);
   }
 }
