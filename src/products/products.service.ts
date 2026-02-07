@@ -48,6 +48,10 @@ export class ProductsService {
       ];
     }
 
+    if (query.isFeatured !== undefined) {
+      where.isFeatured = query.isFeatured;
+    }
+
     if (categorySlug) {
       where.category = { is: { slug: categorySlug } };
     } else if (categoryId) {
@@ -85,7 +89,7 @@ export class ProductsService {
 
   async findFeatured(): Promise<ProductEntity[]> {
     const featuredProducts = await this.prisma.product.findMany({
-      where: { isFeatured: true },
+      where: { isFeatured: true, stock: { gt: 0 } },
       include: { category: true }
     });
     return featuredProducts.map((product) => this.formatProduct(product));
