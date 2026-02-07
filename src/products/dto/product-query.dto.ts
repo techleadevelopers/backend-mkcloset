@@ -30,6 +30,10 @@ export class ProductQueryDto {
   sizes?: string;
 
   @IsOptional()
+  @Type(() => Boolean)
+  isFeatured?: boolean;
+
+  @IsOptional()
   @IsString()
   @IsIn(['name', 'price', 'createdAt', 'updatedAt'])
   sortBy?: 'name' | 'price' | 'createdAt' | 'updatedAt';
