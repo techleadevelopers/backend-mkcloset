@@ -40,6 +40,7 @@ async function bootstrap() {
         'http://127.0.0.1:5174',
         'https://e1688003a97e.ngrok-free.app',
         'https://www.bymkcloset.com.br',
+        'https://mk-closet-q5qyrp10e-d3v-techle4ds-projects.vercel.app',
         frontendUrl,
         viteApiUrl,
       ].filter(Boolean) as string[],
