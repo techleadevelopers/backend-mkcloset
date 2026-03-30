@@ -8,10 +8,11 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '../config/config.service';
 
-const GRAPH_API_VERSION = 'v21.0';
+const GRAPH_API_VERSION = 'v24.0';
 const FACEBOOK_OAUTH_TOKEN_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/oauth/access_token`;
 const INSTAGRAM_ME_URL = `https://graph.instagram.com/${GRAPH_API_VERSION}/me`;
 const INSTAGRAM_MEDIA_BASE_URL = `https://graph.instagram.com/${GRAPH_API_VERSION}`;
+const FACEBOOK_ME_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/me`;
 const INSTAGRAM_MEDIA_FIELDS =
   'id,caption,media_url,permalink,media_type,thumbnail_url,timestamp';
 
@@ -48,6 +49,9 @@ export class InstagramService {
     const businessContext = await this.fetchInstagramBusinessAccount(
       longLivedTokenResult.accessToken,
     );
+    const fbProfile = await this.fetchFacebookProfile(
+      longLivedTokenResult.accessToken,
+    );
 
     return this.prisma.instagramIntegration.upsert({
       where: { shopSlug: targetSlug },
@@ -57,7 +61,7 @@ export class InstagramService {
         tokenType: longLivedTokenResult.tokenType,
         expiresAt,
         facebookPageId: businessContext.pageId,
-        facebookPageName: businessContext.pageName,
+        facebookPageName: businessContext.pageName ?? fbProfile?.name ?? null,
         instagramBusinessAccountId: businessContext.instagramBusinessAccountId,
       },
       update: {
@@ -65,7 +69,7 @@ export class InstagramService {
         tokenType: longLivedTokenResult.tokenType,
         expiresAt,
         facebookPageId: businessContext.pageId,
-        facebookPageName: businessContext.pageName,
+        facebookPageName: businessContext.pageName ?? fbProfile?.name ?? null,
         instagramBusinessAccountId: businessContext.instagramBusinessAccountId,
       },
     });
@@ -112,6 +116,18 @@ export class InstagramService {
       throw new BadGatewayException(
         'Não foi possível carregar o feed do Instagram no momento.',
       );
+    }
+  }
+
+  private async fetchFacebookProfile(accessToken: string) {
+    try {
+      const res = await axios.get(FACEBOOK_ME_URL, {
+        params: { fields: 'id,name', access_token: accessToken },
+      });
+      return res.data;
+    } catch (error) {
+      this.logger.warn('Não foi possível obter perfil do Facebook /me', error);
+      return null;
     }
   }
 

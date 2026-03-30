@@ -9,8 +9,28 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Prisma } from '@prisma/client';
-import { PixChargeResponseDto } from '../dto/create-pix-charge.dto';
 import { Decimal } from '@prisma/client/runtime/library';
+
+type PixGatewayResponse = {
+  transactionId: string;
+  chargeId?: string;
+  status: string;
+  brCode: string;
+  qrCodeImage: string;
+  expiresAt: string;
+  amount: number;
+  description: string;
+  orderId: string;
+};
+
+type CardGatewayResponse = {
+  transactionId: string;
+  status: string;
+  transactionRef: string;
+  amount: number;
+  description: string;
+  orderId: string;
+};
 
 // Interface para os detalhes de um item no checkout do PagSeguro
 interface PagSeguroCheckoutItem {
@@ -203,11 +223,51 @@ export class PagSeguroService {
     }
   }
 
+  async getPublicKey(): Promise<string> {
+    const url = `${this.pagSeguroBaseApiUrl}/public-keys`;
+
+    try {
+      const response = await axios.post(
+        url,
+        { type: 'card' },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.pagSeguroToken}`,
+            'x-api-version': '4.0',
+          },
+        },
+      );
+
+      const publicKey =
+        response.data?.public_key ?? response.data?.publicKey ?? '';
+      if (!publicKey) {
+        throw new InternalServerErrorException(
+          'Resposta invÃ¡lida do PagSeguro: public key ausente.',
+        );
+      }
+
+      return publicKey;
+    } catch (error) {
+      this.logger.error(
+        `[PagSeguroService] Erro ao gerar public key do PagSeguro: ${error.message}`,
+      );
+      if (axios.isAxiosError(error) && error.response) {
+        this.logger.error(
+          `[PagSeguroService] Dados do erro da API PagSeguro (public key): ${JSON.stringify(error.response.data)}`,
+        );
+      }
+      throw new InternalServerErrorException(
+        'Falha ao obter public key do PagSeguro.',
+      );
+    }
+  }
+
   // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
   async createPagSeguroPixCharge(
     details: CreatePagSeguroPixChargeDetails,
     notificationBaseUrl: string,
-  ): Promise<PixChargeResponseDto> {
+  ): Promise<PixGatewayResponse> {
     this.logger.log(
       `[PagSeguroService] Criando cobrança PIX para o pedido ${details.orderId}`,
     );
@@ -284,6 +344,10 @@ export class PagSeguroService {
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
+    this.logger.warn(
+      `[PagSeguroService][HOMOLOG] POST /orders payload=${JSON.stringify(payload)}`,
+    );
+
     this.logger.debug(
       `[PagSeguroService] Enviando cobrança PIX para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
     );
@@ -304,6 +368,9 @@ export class PagSeguroService {
       this.logger.log(
         `[PagSeguroService] Cobrança PIX criada com sucesso para o pedido ${details.orderId}.`,
       );
+      this.logger.warn(
+        `[PagSeguroService][HOMOLOG] response=${JSON.stringify(response.data)}`,
+      );
 
       const qrCodeResponse = response.data.qr_codes?.[0];
 
@@ -315,6 +382,7 @@ export class PagSeguroService {
 
       return {
         transactionId: response.data.id,
+        chargeId: qrCodeResponse.id,
         status: 'PENDING',
         brCode: qrCodeResponse.text,
         qrCodeImage: qrCodeResponse.links?.find(
@@ -351,7 +419,7 @@ export class PagSeguroService {
   async processDirectCreditCardPayment(
     details: CreatePagSeguroCreditCardChargeDetails,
     notificationBaseUrl: string,
-  ): Promise<any> {
+  ): Promise<CardGatewayResponse> {
     this.logger.log(
       `[PagSeguroService] Processando pagamento com cartão para o pedido ${details.orderId}`,
     );
@@ -476,6 +544,10 @@ export class PagSeguroService {
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
+    this.logger.warn(
+      `[PagSeguroService][HOMOLOG] POST /orders payload=${JSON.stringify(payload)}`,
+    );
+
     this.logger.debug(
       `[PagSeguroService] Enviando pagamento com cartão para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
     );
@@ -495,6 +567,9 @@ export class PagSeguroService {
 
       this.logger.log(
         `[PagSeguroService] Pagamento com cartão processado com sucesso para o pedido ${details.orderId}.`,
+      );
+      this.logger.warn(
+        `[PagSeguroService][HOMOLOG] response=${JSON.stringify(response.data)}`,
       );
 
       const charge = response.data.charges?.[0];
@@ -679,6 +754,10 @@ export class PagSeguroService {
       address_modifiable: false,
     };
 
+    this.logger.warn(
+      `[PagSeguroService][HOMOLOG] POST /checkouts payload=${JSON.stringify(payload)}`,
+    );
+
     this.logger.debug(
       `[PagSeguroService] Enviando checkout de redirecionamento para PagSeguro (${this.pagSeguroBaseApiUrl}/checkouts) para o pedido ${details.orderId}.`,
     );
@@ -698,6 +777,9 @@ export class PagSeguroService {
 
       this.logger.log(
         `[PagSeguroService] Checkout de redirecionamento criado com sucesso para order ${details.orderId}.`,
+      );
+      this.logger.warn(
+        `[PagSeguroService][HOMOLOG] response=${JSON.stringify(response.data)}`,
       );
 
       const checkoutId = response.data.id;

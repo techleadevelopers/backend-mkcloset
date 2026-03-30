@@ -92,6 +92,10 @@ export class CreateOrderDto {
   @IsOptional()
   guestId?: string;
 
+  @IsString()
+  @IsOptional()
+  signature?: string;
+
   @ValidateNested()
   @Type(() => GuestContactInfoDto)
   @IsOptional()

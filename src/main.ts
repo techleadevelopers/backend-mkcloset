@@ -36,11 +36,8 @@ async function bootstrap() {
         'http://localhost:5173',
         'http://localhost:5174',
         'http://127.0.0.1:5173',
-        'https://mk-closet-pdhq9mbtd-d3v-techle4ds-projects.vercel.app',
         'http://127.0.0.1:5174',
-        'https://e1688003a97e.ngrok-free.app',
         'https://www.bymkcloset.com.br',
-        'https://mk-closet-q5qyrp10e-d3v-techle4ds-projects.vercel.app',
         frontendUrl,
         viteApiUrl,
       ].filter(Boolean) as string[],
@@ -52,13 +49,7 @@ async function bootstrap() {
           return callback(null, true);
         }
         if (!allowedOrigins.has(origin)) {
-          if (
-            origin.startsWith('http://localhost:') ||
-            origin.startsWith('http://127.0.0.1:')
-          ) {
-            return callback(null, true);
-          }
-          const msg = `A pol�tica CORS para este site n�o permite acesso da origem especificada: ${origin}.`;
+          const msg = `A política CORS para este site não permite acesso da origem especificada: ${origin}.`;
           return callback(new Error(msg), false);
         }
         return callback(null, true);
@@ -83,26 +74,30 @@ async function bootstrap() {
       }),
     );
 
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('API Mkcloset')
-      .setDescription('Documenta��o da API da Mkcloset')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    const swaggerEnabledEnv = configService.get<string>('SWAGGER_ENABLED');
+    const swaggerEnabled = swaggerEnabledEnv === 'true';
 
-    // 2. Alinhe a documenta��o do Swagger para a raiz do prefixo global
-    // Isso far� com que ela seja acess�vel em /api
-    SwaggerModule.setup('', app, document);
+    if (swaggerEnabled) {
+      const swaggerConfig = new DocumentBuilder()
+        .setTitle('API Mkcloset')
+        .setDescription('Documenta??o da API da Mkcloset')
+        .setVersion('1.0')
+        .addBearerAuth()
+        .build();
+      const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-    const port = configService.get<number>('PORT') || 3001;
+      // Disponibiliza em /api/docs (prefixo global j? aplicado)
+      SwaggerModule.setup('docs', app, document);
+    }
+
+        const port = configService.get<number>('PORT') || 3001;
     await app.listen(port, '0.0.0.0');
 
     console.log(
-      `Aplica��o iniciada com sucesso. Acesse: ${await app.getUrl()}`,
+      `Aplicação iniciada com sucesso. Acesse: ${await app.getUrl()}`,
     );
   } catch (error) {
-    console.error('Erro fatal durante a inicializa��o da aplica��o:', error);
+    console.error('Erro fatal durante a inicialização da aplicação:', error);
     process.exit(1);
   }
 }

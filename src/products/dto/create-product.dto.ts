@@ -45,9 +45,9 @@ export class CreateProductDto {
   @Min(0)
   originalPrice?: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsUrl()
-  imageUrl: string;
+  imageUrl?: string;
 
   @IsNotEmpty()
   @IsString()

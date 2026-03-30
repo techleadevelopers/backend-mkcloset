@@ -15,13 +15,30 @@ import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
+import { ConfigService } from 'src/config/config.service';
+import { createHmac } from 'crypto';
 
 // Aplica o OptionalJwtAuthGuard na classe para que todos os métodos o usem
 // Ou aplique individualmente se houver métodos que SÓ podem ser acessados por logados
 @UseGuards(OptionalJwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private verifyGuest(guestId?: string, signature?: string) {
+    if (!guestId) {
+      throw new BadRequestException('guestId é obrigatório para convidados.');
+    }
+    const expected = createHmac('sha256', this.configService.guestSigningSecret)
+      .update(guestId)
+      .digest('hex');
+    if (expected !== signature) {
+      throw new BadRequestException('Assinatura de guestId inválida.');
+    }
+  }
 
   @Post()
   // MUDANÇA AQUI: createOrderDto vem primeiro, user? vem depois
@@ -29,6 +46,12 @@ export class OrdersController {
     @Body() createOrderDto: CreateOrderDto,
     @CurrentUser() user?: User,
   ) {
+    if (!user) {
+      this.verifyGuest(
+        createOrderDto.guestId,
+        (createOrderDto as any)?.signature || (createOrderDto as any)?.['x-guest-signature'],
+      );
+    }
     // MUDANÇA AQUI: A ordem dos argumentos na chamada ao service foi ajustada
     return this.ordersService.create(createOrderDto, user?.id);
   }

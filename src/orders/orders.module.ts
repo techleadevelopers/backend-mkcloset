@@ -7,6 +7,8 @@ import { CartModule } from 'src/cart/cart.module';
 import { UsersModule } from 'src/users/users.module';
 import { ProductsModule } from 'src/products/products.module';
 import { NotificationsModule } from 'src/notifications/notifications.module'; // <-- Importação adicionada
+import { ConfigModule } from 'src/config/config.module';
+import { ShippingModule } from 'src/shipping/shipping.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module'; //
     UsersModule,
     ProductsModule,
     NotificationsModule, // <-- Agora o OrdersService terá acesso ao NotificationsService
+    ConfigModule,
+    ShippingModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

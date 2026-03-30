@@ -11,7 +11,13 @@ export class ConfigService {
   }
 
   get jwtSecret(): string {
-    return this.nestConfigService.get<string>('JWT_SECRET') || 'supersecretkey';
+    const secret = this.nestConfigService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new InternalServerErrorException(
+        'A variÃ¡vel de ambiente JWT_SECRET Ã© obrigatÃ³ria.',
+      );
+    }
+    return secret;
   }
 
   get jwtExpiresIn(): string {
@@ -122,6 +128,17 @@ export class ConfigService {
   }
   // -----------------------------------
 
+  get guestSigningSecret(): string {
+    const secret = this.nestConfigService.get<string>('GUEST_SIGNING_SECRET');
+    if (!secret) {
+      throw new InternalServerErrorException(
+        'GUEST_SIGNING_SECRET não configurado para assinar guestId.',
+      );
+    }
+    return secret;
+  }
+  // -----------------------------------
+
   // --- Configurações da Ferramenta Antifraude ---
   get antifraudApiUrl(): string {
     return this.nestConfigService.get<string>('ANTIFRAUD_API_URL') || '';
@@ -132,3 +149,5 @@ export class ConfigService {
   }
   // -----------------------------------
 }
+
+

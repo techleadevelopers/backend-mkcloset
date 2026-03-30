@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   Param,
@@ -17,6 +18,8 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { CreatePixChargeDto } from './dto/create-pix-charge.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import type { Request } from 'express'; // CORREÇÃO AQUI: Adicionado 'type' à importação de Request
+import { ConfigService } from 'src/config/config.service';
+import { createHmac } from 'crypto';
 
 // Interface para o payload do usuário injetado no req.user pelo JwtStrategy
 interface RequestUserPayload {
@@ -27,14 +30,34 @@ interface RequestUserPayload {
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
 
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private verifyGuest(guestId?: string, signature?: string) {
+    if (!guestId) {
+      throw new BadRequestException('guestId é obrigatório para convidados.');
+    }
+    const expected = createHmac('sha256', this.configService.guestSigningSecret)
+      .update(guestId)
+      .digest('hex');
+    if (expected !== signature) {
+      throw new BadRequestException('Assinatura de guestId inválida.');
+    }
+  }
 
   @Post('initiate-checkout/:orderId')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async initiatePagSeguroCheckout(
     @CurrentUser() user: User | undefined,
     @Param('orderId') orderId: string,
   ) {
+    if (!user?.id) {
+      throw new BadRequestException(
+        'Apenas usuários autenticados podem iniciar o checkout redirecionado.',
+      );
+    }
     return this.paymentsService.initiatePagSeguroRedirectCheckout(
       user?.id,
       orderId,
@@ -55,6 +78,12 @@ export class PaymentsController {
         'Usuário ou ID de convidado não fornecido.',
       );
     }
+    if (!user?.id) {
+      this.verifyGuest(
+        body.guestId,
+        (body as any)?.signature || (body as any)?.['x-guest-signature'],
+      );
+    }
     return this.paymentsService.createPixCharge(orderId, userId);
   }
 
@@ -73,6 +102,16 @@ export class PaymentsController {
       userId,
       processPaymentDto,
     );
+  }
+
+  @Get('card/session')
+  async createCardSession() {
+    return this.paymentsService.createCardSession();
+  }
+
+  @Get('card/public-key')
+  async getCardPublicKey() {
+    return this.paymentsService.getCardPublicKey();
   }
 
   @Post('webhook/pagseguro')
@@ -104,6 +143,7 @@ export class PaymentsController {
       pagSeguroCheckoutId,
       signature,
       rawBody,
+      payload,
     );
   }
 }

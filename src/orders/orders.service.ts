@@ -12,6 +12,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus, Prisma, Order, User } from '@prisma/client';
 import { ProductEntity } from 'src/products/entities/product.entity';
 import { NotificationsService } from 'src/notifications/notifications.service'; // NOVO: Importe o serviço de notificações
+import { ShippingService } from 'src/shipping/shipping.service';
+import { CartItemForShipping } from 'src/shipping/dto/calculate-shipping.dto';
 
 // Opcional: Tipo para o pedido com as relações que esperamos carregar
 // Isso ajuda o TypeScript a entender a estrutura do objeto 'order'
@@ -45,7 +47,57 @@ export class OrdersService {
     private usersService: UsersService,
     private productsService: ProductsService,
     private notificationsService: NotificationsService, // NOVO: Injete o serviço de notificações
+    private shippingService: ShippingService,
   ) {}
+
+  private buildShippingItemsFromCart(
+    cartItems: Array<{
+      id: string;
+      quantity: number;
+      product: {
+        id: string;
+        name: string;
+        price: Prisma.Decimal | number;
+        weight?: number | null;
+        dimensions?: Prisma.JsonValue | null;
+      };
+    }>,
+  ): CartItemForShipping[] {
+    return cartItems.map((item) => {
+      const rawDimensions =
+        item.product.dimensions &&
+        typeof item.product.dimensions === 'object' &&
+        !Array.isArray(item.product.dimensions)
+          ? (item.product.dimensions as Record<string, unknown>)
+          : null;
+
+      const dimensions = rawDimensions
+        ? {
+            length: Number(rawDimensions.length),
+            width: Number(rawDimensions.width),
+            height: Number(rawDimensions.height),
+          }
+        : undefined;
+
+      return {
+        id: item.id,
+        quantity: item.quantity,
+        product: {
+          id: item.product.id,
+          name: item.product.name,
+          price: Number(item.product.price),
+          weight: item.product.weight ?? undefined,
+          dimensions:
+            dimensions &&
+            Number.isFinite(dimensions.length) &&
+            Number.isFinite(dimensions.width) &&
+            Number.isFinite(dimensions.height)
+              ? dimensions
+              : undefined,
+        },
+      };
+    });
+  }
 
   /**
    * Busca um pedido pelo seu ID único.
@@ -216,8 +268,30 @@ export class OrdersService {
       }
     }
 
-    // 4. Calcular frete (usando o valor já fornecido pelo frontend)
-    const parsedShippingPrice = new Prisma.Decimal(shippingPrice);
+    // 4. Recalcular o frete no backend para não confiar no valor enviado pelo frontend
+    const shippingZipCode = finalShippingAddressData.zipCode;
+    const shippingCalculation = await this.shippingService.calculateShipping({
+      zipCode: shippingZipCode,
+      items: this.buildShippingItemsFromCart(cart.items),
+    });
+
+    const selectedShippingOption = shippingCalculation.options.find(
+      (option) => option.service === shippingService,
+    );
+
+    if (!selectedShippingOption) {
+      throw new BadRequestException(
+        'A opção de frete selecionada não é válida para este CEP.',
+      );
+    }
+
+    if (Math.abs(selectedShippingOption.price - shippingPrice) > 0.01) {
+      throw new BadRequestException(
+        'O valor do frete foi atualizado. Recalcule o frete antes de finalizar o pedido.',
+      );
+    }
+
+    const parsedShippingPrice = new Prisma.Decimal(selectedShippingOption.price);
 
     // 5. Criar o pedido na transação
     const order = await this.prisma.$transaction(async (prisma) => {

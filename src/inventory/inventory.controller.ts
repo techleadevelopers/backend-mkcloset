@@ -2,11 +2,12 @@ import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-// import { RolesGuard } from 'src/common/guards/roles.guard'; // Para controle de acesso por função (ex: admin)
-// import { Roles } from 'src/common/decorators/roles.decorator'; // Decorator de funções
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
-// Geralmente, o controle de estoque é uma rota protegida para administradores
-@UseGuards(JwtAuthGuard)
+// Controle de estoque é exclusivo de administradores
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
@@ -16,7 +17,7 @@ export class InventoryController {
     return this.inventoryService.getStock(productId);
   }
 
-  // @Roles('admin') // Exemplo de proteção por função
+  @Roles(Role.ADMIN)
   @Patch(':productId/stock')
   async updateStock(
     @Param('productId') productId: string,

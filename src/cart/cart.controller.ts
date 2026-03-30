@@ -10,6 +10,8 @@ import {
   UseGuards,
   BadRequestException,
   Query,
+  UnauthorizedException,
+  Headers,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { AddToCartDto } from './dto/add-to-cart.dto';
@@ -18,10 +20,32 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'; // Para rotas q
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard'; // Para rotas que usuários logados OU convidados podem acessar
+import { ConfigService } from 'src/config/config.service';
+import { createHmac } from 'crypto';
 
 @Controller('cart')
 export class CartController {
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private verifyGuestSignature(guestId?: string, signature?: string) {
+    if (!guestId || guestId.length < 20) {
+      throw new BadRequestException(
+        'ID de convidado ausente ou inválido na requisição.',
+      );
+    }
+    if (!signature) {
+      throw new UnauthorizedException('Assinatura do guestId ausente.');
+    }
+    const expected = createHmac('sha256', this.configService.guestSigningSecret)
+      .update(guestId)
+      .digest('hex');
+    if (expected !== signature) {
+      throw new UnauthorizedException('Assinatura do guestId inválida.');
+    }
+  }
 
   // Rota para usuários logados verem seu próprio carrinho
   // Esta rota AINDA exige autenticação JWT, pois é para o carrinho associado a um usuário registrado.
@@ -35,13 +59,13 @@ export class CartController {
   // Usa OptionalJwtAuthGuard para permitir acesso sem JWT, mas foca no guestId.
   @UseGuards(OptionalJwtAuthGuard)
   @Get('guest')
-  async getGuestCart(@Query('guestId') guestId?: string) {
-    if (!guestId) {
-      throw new BadRequestException(
-        'ID de convidado ausente na query string para recuperar o carrinho de convidado.',
-      );
-    }
-    return this.cartService.getCartForGuest(guestId);
+  async getGuestCart(
+    @Query('guestId') guestId?: string,
+    @Query('signature') signatureQuery?: string,
+    @Headers('x-guest-signature') signatureHeader?: string,
+  ) {
+    this.verifyGuestSignature(guestId, signatureHeader || signatureQuery);
+    return this.cartService.getCartForGuest(guestId!);
   }
 
   // Adicionar item ao carrinho (para usuários logados ou convidados)
@@ -54,11 +78,8 @@ export class CartController {
   ) {
     const userId = user?.id;
     const guestId = addToCartDto.guestId; // Assumindo que AddToCartDto tem um campo guestId opcional
-
-    if (!userId && !guestId) {
-      throw new BadRequestException(
-        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
-      );
+    if (!userId) {
+      this.verifyGuestSignature(guestId, (addToCartDto as any)?.signature);
     }
 
     // O serviço será responsável por criar/atualizar o carrinho com base em userId ou guestId
@@ -74,13 +95,11 @@ export class CartController {
     @Param('itemId') itemId: string,
     @Body() updateCartItemDto: UpdateCartItemDto,
     @Query('guestId') guestId?: string, // Recebe guestId da query string para convidados
+    @Query('signature') signatureQuery?: string,
+    @Headers('x-guest-signature') signatureHeader?: string,
   ) {
     const userId = user?.id;
-    if (!userId && !guestId) {
-      throw new BadRequestException(
-        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
-      );
-    }
+    if (!userId) this.verifyGuestSignature(guestId, signatureHeader || signatureQuery);
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
     return this.cartService.updateCartItemQuantity(
       userId,
@@ -98,13 +117,11 @@ export class CartController {
     @CurrentUser() user: User | undefined, // user pode ser undefined para convidados
     @Param('itemId') itemId: string,
     @Query('guestId') guestId?: string, // Recebe guestId da query string para convidados
+    @Query('signature') signatureQuery?: string,
+    @Headers('x-guest-signature') signatureHeader?: string,
   ) {
     const userId = user?.id;
-    if (!userId && !guestId) {
-      throw new BadRequestException(
-        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
-      );
-    }
+    if (!userId) this.verifyGuestSignature(guestId, signatureHeader || signatureQuery);
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
     return this.cartService.removeCartItem(userId, guestId, itemId);
   }
@@ -117,14 +134,24 @@ export class CartController {
   async clearCart(
     @CurrentUser() user: User | undefined, // user pode ser undefined para convidados
     @Query('guestId') guestId?: string, // Recebe guestId da query string para convidados
+    @Query('signature') signatureQuery?: string,
+    @Headers('x-guest-signature') signatureHeader?: string,
   ) {
     const userId = user?.id;
-    if (!userId && !guestId) {
-      throw new BadRequestException(
-        'Identificador de carrinho ausente (ID de usuário ou ID de convidado).',
-      );
-    }
+    if (!userId) this.verifyGuestSignature(guestId, signatureHeader || signatureQuery);
     // O serviço precisará de lógica para encontrar o carrinho certo (por userId ou guestId)
     return this.cartService.clearCart(userId, guestId);
+  }
+
+  // Endpoint para assinar guestId (retorna assinatura HMAC)
+  @Get('guest/sign')
+  async signGuest(@Query('guestId') guestId?: string) {
+    if (!guestId || guestId.length < 20) {
+      throw new BadRequestException('guestId inválido para assinatura.');
+    }
+    const signature = createHmac('sha256', this.configService.guestSigningSecret)
+      .update(guestId)
+      .digest('hex');
+    return { guestId, signature };
   }
 }

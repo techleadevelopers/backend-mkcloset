@@ -27,6 +27,14 @@ export class CreatePixChargeDto {
   @IsUUID()
   @IsOptional()
   guestId?: string; // NOVO: Adicionado para permitir que o guestId seja passado
+
+  @ApiPropertyOptional({
+    description: 'Assinatura HMAC do guestId (para validar propriedade do carrinho)',
+    example: 'abc123hmac',
+  })
+  @IsString()
+  @IsOptional()
+  signature?: string;
 }
 
 // DTO de resposta para a criação de uma cobrança PIX

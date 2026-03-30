@@ -20,4 +20,8 @@ export class AddToCartDto {
   @IsOptional() // NOVO: Campo opcional para o ID do convidado
   @IsString()
   guestId?: string;
+
+  @IsOptional()
+  @IsString()
+  signature?: string;
 }

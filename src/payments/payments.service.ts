@@ -17,10 +17,7 @@ import {
   Transaction,
 } from '@prisma/client';
 import { PagSeguroService } from './providers/pagseguro.service';
-import {
-  CreatePixChargeDto,
-  PixChargeResponseDto,
-} from './dto/create-pix-charge.dto';
+import { PixChargeResponseDto } from './dto/create-pix-charge.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ConfigService } from 'src/config/config.service';
@@ -41,6 +38,53 @@ type OrderWithDetails = Order & {
   }[];
 };
 
+type PaymentIntentGateway =
+  | 'PAGSEGURO_PIX'
+  | 'PAGSEGURO_CARD'
+  | 'PAGSEGURO_REDIRECT';
+type PaymentIntentStatus =
+  | 'CREATED'
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+type PaymentIntentRecord = {
+  id: string;
+  userId?: string | null;
+  orderId: string;
+  gateway: PaymentIntentGateway;
+  status: PaymentIntentStatus;
+  amount: Prisma.Decimal | Decimal;
+  currency: string;
+  referenceId: string;
+  idempotencyKey?: string | null;
+  externalOrderId?: string | null;
+  externalChargeId?: string | null;
+  transactionRef?: string | null;
+  qrCodeText?: string | null;
+  qrCodeUrl?: string | null;
+  expiresAt?: Date | null;
+  lastWebhookPayload?: Prisma.JsonValue | null;
+  description?: string | null;
+  metadata?: Prisma.JsonValue | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const PAYMENT_TRANSITIONS: Record<
+  PaymentIntentStatus,
+  PaymentIntentStatus[]
+> = {
+  CREATED: ['PENDING'],
+  PENDING: ['CONFIRMED', 'FAILED', 'CANCELLED', 'EXPIRED'],
+  CONFIRMED: [],
+  FAILED: [],
+  CANCELLED: [],
+  EXPIRED: [],
+};
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -58,61 +102,33 @@ export class PaymentsService {
     orderId: string,
     userId: string,
   ): Promise<PixChargeResponseDto> {
-    const order: OrderWithDetails =
-      await this.ordersService.findOneById(orderId);
-
-    if (!order) {
-      throw new NotFoundException(`Pedido com ID ${orderId} não encontrado.`);
-    }
-
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        'O pedido já foi pago ou está em outro status.',
-      );
-    }
-
-    this.ensureOrderOwnership(order, userId);
-
-    const existingTransaction = await this.getExistingPaymentTransaction(
+    const order = await this.getPayableOrder(orderId, userId);
+    const existingIntent = await this.findPaymentIntent(
       order.id,
+      'PAGSEGURO_PIX',
     );
-    if (existingTransaction) {
+
+    if (existingIntent) {
       this.logger.log(
-        `Cobrança PIX já iniciada para o pedido ${order.id}. Retornando recurso existente.`,
+        `Intent PIX jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
-      return this.buildPixResponseFromTransaction(existingTransaction);
+      return this.buildPixResponseFromIntent(existingIntent);
     }
 
     const { customer, shippingAddress, items } =
       this.buildPagSeguroPayload(order);
+    const antifraudResult = await this.runAntifraud(order, customer, 'PIX');
+    const backendUrl = this.requireBackendUrl();
+
+    const intent = await this.claimPaymentIntent({
+      order,
+      userId,
+      gateway: 'PAGSEGURO_PIX',
+      description: `CobranÃ§a PIX para Pedido #${order.id}`,
+      metadata: { paymentMethod: 'PIX' },
+    });
 
     try {
-      const antifraudResult = await this.antifraudService.analyzeTransaction({
-        orderId: order.id,
-        amount: order.totalAmount.toNumber(),
-        customerEmail: customer.email,
-        customerCpf: customer.cpf,
-        paymentMethod: 'PIX',
-        items: order.items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          price: item.price.toNumber(),
-        })),
-      });
-
-      if (antifraudResult.status === 'DENIED') {
-        throw new BadRequestException(
-          'Transação negada pela análise antifraude.',
-        );
-      }
-
-            const backendUrl = this.configService.backendUrl;
-      if (!backendUrl) {
-        throw new InternalServerErrorException(
-          'A variável de ambiente BACKEND_URL não está definida.',
-        );
-      }
-
       const pagSeguroResponse =
         await this.pagSeguroService.createPagSeguroPixCharge(
           {
@@ -128,34 +144,39 @@ export class PaymentsService {
           backendUrl,
         );
 
-      await this.prisma.transaction.create({
-        data: {
-          userId: order.userId || null,
-          orderId: order.id,
-          amount: order.totalAmount,
-          type: TransactionType.PAYMENT,
-          status: 'PENDING',
-          description: `Cobrança PIX para Pedido #${order.id}`,
-          gatewayTransactionId: pagSeguroResponse.transactionId,
-          transactionRef: pagSeguroResponse.brCode,
-          qrCodeUrl: pagSeguroResponse.qrCodeImage,
-          antifraudStatus: antifraudResult.status,
+      const updatedIntent = await this.updatePaymentIntent(intent.id, {
+        status: 'PENDING',
+        externalOrderId: pagSeguroResponse.transactionId,
+        externalChargeId: pagSeguroResponse.chargeId ?? null,
+        transactionRef: pagSeguroResponse.brCode,
+        qrCodeText: pagSeguroResponse.brCode,
+        qrCodeUrl: pagSeguroResponse.qrCodeImage,
+        expiresAt: pagSeguroResponse.expiresAt
+          ? new Date(pagSeguroResponse.expiresAt)
+          : null,
+        metadata: {
+          ...(intent.metadata as object | null),
+          providerStatus: pagSeguroResponse.status,
         },
       });
 
-      return pagSeguroResponse;
-    } catch (error) {
-      this.logger.error(
-        `Erro ao criar cobrança PIX para o pedido ${orderId}: ${error.message}`,
-        error.stack,
+      await this.syncTransactionFromIntent(
+        order,
+        updatedIntent,
+        antifraudResult.status,
       );
-      if (
-        error instanceof InternalServerErrorException &&
-        error.message.startsWith('Falha no PagSeguro:')
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
+
+      return this.buildPixResponseFromIntent(updatedIntent);
+    } catch (error) {
+      await this.updatePaymentIntent(intent.id, {
+        status: 'FAILED',
+        metadata: {
+          ...(intent.metadata as object | null),
+          error: error.message,
+        },
+      });
+      throw this.rethrowProviderError(
+        error,
         'Falha ao iniciar o processo de pagamento PIX com PagSeguro.',
       );
     }
@@ -171,66 +192,49 @@ export class PaymentsService {
 
     if (!cardToken || !cardHolderName || !cardCpf) {
       throw new BadRequestException(
-        'Dados do cartão incompletos para processamento direto.',
+        'Dados do cartÃ£o incompletos para processamento direto.',
       );
     }
 
-    const order: OrderWithDetails =
-      await this.ordersService.findOneById(orderId);
-
-    if (!order) {
-      throw new NotFoundException(`Pedido com ID ${orderId} não encontrado.`);
-    }
-
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        'O pedido já foi pago ou está em outro status.',
-      );
-    }
-
-    this.ensureOrderOwnership(order, userId);
-
-    const existingTransaction = await this.getExistingPaymentTransaction(
+    const order = await this.getPayableOrder(orderId, userId);
+    const existingIntent = await this.findPaymentIntent(
       order.id,
+      'PAGSEGURO_CARD',
     );
-    if (existingTransaction) {
+
+    if (existingIntent) {
       this.logger.log(
-        `Pagamento com cartão já registrado para o pedido ${order.id}. Retornando recurso existente.`,
+        `Intent de cartÃ£o jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
-      return this.buildExistingDirectCardResponse(existingTransaction);
+      return this.buildCardResponseFromIntent(existingIntent);
     }
 
     const { customer, shippingAddress, items } =
       this.buildPagSeguroPayload(order);
+    const antifraudResult = await this.runAntifraud(
+      order,
+      customer,
+      'CREDIT_CARD',
+      {
+        brand: cardBrand,
+        installments: cardInstallments,
+      },
+    );
+    const backendUrl = this.requireBackendUrl();
+
+    const intent = await this.claimPaymentIntent({
+      order,
+      userId,
+      gateway: 'PAGSEGURO_CARD',
+      description: `Pagamento com CartÃ£o de CrÃ©dito para Pedido #${order.id}`,
+      metadata: {
+        paymentMethod: 'CREDIT_CARD',
+        cardBrand: cardBrand ?? null,
+        installments: cardInstallments ?? 1,
+      },
+    });
 
     try {
-      const antifraudResult = await this.antifraudService.analyzeTransaction({
-        orderId: order.id,
-        amount: order.totalAmount.toNumber(),
-        customerEmail: customer.email,
-        customerCpf: customer.cpf,
-        paymentMethod: 'CREDIT_CARD',
-        items: order.items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          price: item.price.toNumber(),
-        })),
-        cardDetails: { brand: cardBrand, installments: cardInstallments },
-      });
-
-      if (antifraudResult.status === 'DENIED') {
-        throw new BadRequestException(
-          'Transação negada pela análise antifraude.',
-        );
-      }
-
-            const backendUrl = this.configService.backendUrl;
-      if (!backendUrl) {
-        throw new InternalServerErrorException(
-          'A variável de ambiente BACKEND_URL não está definida.',
-        );
-      }
-
       const pagSeguroResponse =
         await this.pagSeguroService.processDirectCreditCardPayment(
           {
@@ -252,55 +256,42 @@ export class PaymentsService {
           backendUrl,
         );
 
-      await this.prisma.transaction.create({
-        data: {
-          userId: order.userId || null,
-          orderId: order.id,
-          amount: order.totalAmount,
-          type: TransactionType.PAYMENT,
-          status: pagSeguroResponse.status,
-          description: `Pagamento com Cartão de Crédito para Pedido #${order.id}`,
-          gatewayTransactionId: pagSeguroResponse.transactionId,
-          transactionRef: pagSeguroResponse.transactionRef,
-          antifraudStatus: antifraudResult.status,
+      const normalizedStatus = this.mapExternalStatusToIntentStatus(
+        pagSeguroResponse.status,
+      );
+      const updatedIntent = await this.updatePaymentIntent(intent.id, {
+        status: normalizedStatus,
+        externalOrderId: pagSeguroResponse.transactionId,
+        externalChargeId: pagSeguroResponse.transactionRef ?? null,
+        transactionRef: pagSeguroResponse.transactionRef ?? null,
+        metadata: {
+          ...(intent.metadata as object | null),
+          providerStatus: pagSeguroResponse.status,
         },
       });
 
-      if (pagSeguroResponse.status === OrderStatus.PAID) {
-        await this.prisma.order.update({
-          where: { id: order.id },
-          data: { status: OrderStatus.PAID },
-        });
-        try {
-          const recipientEmail = order.user?.email ?? order.guestEmail;
-          if (recipientEmail) {
-            await this.notificationsService.sendPaymentConfirmationEmail(
-              recipientEmail,
-              order.id,
-              order.totalAmount.toNumber(),
-            );
-          }
-        } catch (emailError) {
-          this.logger.error(
-            `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${emailError.message}`,
-          );
-        }
+      await this.syncTransactionFromIntent(
+        order,
+        updatedIntent,
+        antifraudResult.status,
+      );
+
+      if (updatedIntent.status === 'CONFIRMED') {
+        await this.markOrderPaid(order);
       }
 
-      return pagSeguroResponse;
+      return this.buildCardResponseFromIntent(updatedIntent);
     } catch (error) {
-      this.logger.error(
-        `Erro ao processar pagamento com cartão para o pedido ${orderId}: ${error.message}`,
-        error.stack,
-      );
-      if (
-        error instanceof InternalServerErrorException &&
-        error.message.startsWith('Falha no PagSeguro:')
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        'Falha ao processar pagamento com cartão de crédito.',
+      await this.updatePaymentIntent(intent.id, {
+        status: 'FAILED',
+        metadata: {
+          ...(intent.metadata as object | null),
+          error: error.message,
+        },
+      });
+      throw this.rethrowProviderError(
+        error,
+        'Falha ao processar pagamento com cartÃ£o de crÃ©dito.',
       );
     }
   }
@@ -308,64 +299,38 @@ export class PaymentsService {
   async initiatePagSeguroRedirectCheckout(
     userId: string | undefined,
     orderId: string,
-  ): Promise<{ redirectUrl: string }> {
-    const order: OrderWithDetails =
-      await this.ordersService.findOneById(orderId);
-
-    if (!order) {
-      throw new NotFoundException(`Pedido com ID ${orderId} não encontrado.`);
-    }
-
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        'O pedido já foi pago ou está em outro status.',
-      );
-    }
-
-    this.ensureOrderOwnership(order, userId);
-
-    const existingTransaction = await this.getExistingPaymentTransaction(
+  ): Promise<{ redirectUrl: string; paymentIntentId: string }> {
+    const order = await this.getPayableOrder(orderId, userId);
+    const existingIntent = await this.findPaymentIntent(
       order.id,
+      'PAGSEGURO_REDIRECT',
     );
-    if (existingTransaction) {
+
+    if (existingIntent) {
       this.logger.log(
-        `Checkout PagSeguro já criado para o pedido ${order.id}. Retornando recurso existente.`,
+        `Intent de checkout redirecionado jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
-      return this.buildExistingRedirectResponse(existingTransaction);
+      return this.buildRedirectResponseFromIntent(existingIntent);
     }
 
     const { customer, shippingAddress, items } =
       this.buildPagSeguroPayload(order);
-    const clientEmail = customer.email;
-    const clientCpf = customer.cpf;
+    const antifraudResult = await this.runAntifraud(
+      order,
+      customer,
+      'REDIRECT_CHECKOUT',
+    );
+    const backendUrl = this.requireBackendUrl();
+
+    const intent = await this.claimPaymentIntent({
+      order,
+      userId,
+      gateway: 'PAGSEGURO_REDIRECT',
+      description: `Checkout PagSeguro para Pedido #${order.id}`,
+      metadata: { paymentMethod: 'REDIRECT_CHECKOUT' },
+    });
 
     try {
-      const antifraudResult = await this.antifraudService.analyzeTransaction({
-        orderId: order.id,
-        amount: order.totalAmount.toNumber(),
-        customerEmail: clientEmail,
-        customerCpf: clientCpf,
-        paymentMethod: 'REDIRECT_CHECKOUT',
-        items: order.items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          price: item.price.toNumber(),
-        })),
-      });
-
-      if (antifraudResult.status === 'DENIED') {
-        throw new BadRequestException(
-          'Transação negada pela análise antifraude.',
-        );
-      }
-
-            const backendUrl = this.configService.backendUrl;
-      if (!backendUrl) {
-        throw new InternalServerErrorException(
-          'A variável de ambiente BACKEND_URL não está definida.',
-        );
-      }
-
       const pagSeguroResponse =
         await this.pagSeguroService.createPagSeguroCheckoutRedirect(
           {
@@ -381,49 +346,57 @@ export class PaymentsService {
           backendUrl,
         );
 
-      await this.prisma.transaction.create({
-        data: {
-          userId: order.userId || null,
-          orderId: order.id,
-          amount: order.totalAmount,
-          type: TransactionType.PAYMENT,
-          status: 'PENDING_REDIRECT',
-          description: `Iniciação de pagamento via PagSeguro Checkout para Pedido #${order.id}`,
-          gatewayTransactionId: pagSeguroResponse.pagSeguroCheckoutId,
-          transactionRef: pagSeguroResponse.redirectUrl,
-          antifraudStatus: antifraudResult.status,
+      const updatedIntent = await this.updatePaymentIntent(intent.id, {
+        status: 'CREATED',
+        externalOrderId: pagSeguroResponse.pagSeguroCheckoutId,
+        transactionRef: pagSeguroResponse.redirectUrl,
+        metadata: {
+          ...(intent.metadata as object | null),
+          providerStatus: 'PENDING_REDIRECT',
         },
       });
 
-      return { redirectUrl: pagSeguroResponse.redirectUrl };
-    } catch (error) {
-      this.logger.error(
-        `Erro ao iniciar checkout de redirecionamento para o pedido ${orderId}: ${error.message}`,
-        error.stack,
+      await this.syncTransactionFromIntent(
+        order,
+        updatedIntent,
+        antifraudResult.status,
       );
-      if (
-        error instanceof InternalServerErrorException &&
-        error.message.startsWith('Falha no PagSeguro:')
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
+
+      return this.buildRedirectResponseFromIntent(updatedIntent);
+    } catch (error) {
+      await this.updatePaymentIntent(intent.id, {
+        status: 'FAILED',
+        metadata: {
+          ...(intent.metadata as object | null),
+          error: error.message,
+        },
+      });
+      throw this.rethrowProviderError(
+        error,
         'Falha ao iniciar o processo de pagamento com PagSeguro.',
       );
     }
+  }
+
+  async createCardSession(): Promise<{ sessionId: string }> {
+    return { sessionId: await this.pagSeguroService.createSession() };
+  }
+
+  async getCardPublicKey(): Promise<{ publicKey: string }> {
+    return { publicKey: await this.pagSeguroService.getPublicKey() };
   }
 
   async handlePagSeguroNotification(
     pagSeguroCheckoutId: string,
     signature: string,
     rawBody: string,
+    payload: any,
   ) {
     this.logger.log(
-      `[PaymentsService] Webhook do PagSeguro recebido para checkout ID: ${pagSeguroCheckoutId}`,
+      `[PaymentsService] Webhook do PagSeguro recebido para checkout/order ID: ${pagSeguroCheckoutId}`,
     );
 
     const webhookSecret = this.configService.pagSeguroWebhookSecret;
-
     const expectedSignature = crypto
       .createHmac('sha256', webhookSecret)
       .update(rawBody)
@@ -431,212 +404,424 @@ export class PaymentsService {
 
     if (signature !== expectedSignature) {
       this.logger.error(
-        `[PaymentsService] Assinatura do webhook inválida para checkout ID: ${pagSeguroCheckoutId}.`,
+        `[PaymentsService] Assinatura do webhook invÃ¡lida para ${pagSeguroCheckoutId}.`,
       );
-      throw new UnauthorizedException('Assinatura do webhook inválida.');
+      throw new UnauthorizedException('Assinatura do webhook invÃ¡lida.');
     }
-    this.logger.log(
-      `[PaymentsService] Assinatura do webhook verificada com sucesso para checkout ID: ${pagSeguroCheckoutId}.`,
-    );
 
-    const checkoutDetails =
-      await this.pagSeguroService.getCheckoutDetails(pagSeguroCheckoutId);
-    const pagSeguroTransactionStatus =
-      checkoutDetails.status ||
-      checkoutDetails.charges?.[0]?.status ||
-      'PENDING';
-    const newOrderStatus = this.mapPagSeguroStatusToOrderStatus(
-      pagSeguroTransactionStatus,
-    );
-
-    const transaction = await this.prisma.transaction.findFirst({
-      where: { gatewayTransactionId: pagSeguroCheckoutId },
-      include: { order: true },
-    });
-
-    if (!transaction || !transaction.order) {
+    const intent = await this.findPaymentIntentByExternalId(pagSeguroCheckoutId);
+    if (!intent) {
       this.logger.warn(
-        `Notificação do PagSeguro recebida para o checkout '${pagSeguroCheckoutId}', mas nenhuma transação correspondente foi encontrada.`,
+        `Webhook recebido para ${pagSeguroCheckoutId}, mas nenhum payment intent correspondente foi encontrado.`,
       );
       throw new NotFoundException(
-        'Transação não encontrada para o checkout ID fornecido.',
+        'Payment intent nÃ£o encontrado para o identificador recebido.',
       );
     }
 
-    if (
-      transaction.status === newOrderStatus &&
-      transaction.order.status === newOrderStatus
+    const providerDetails = await this.fetchProviderDetails(intent);
+    const providerStatus =
+      providerDetails.status ?? providerDetails.charges?.[0]?.status ?? 'PENDING';
+    const desiredState = this.mapExternalStatusToIntentStatus(providerStatus);
+    const nextState = this.applyTransition(intent.status, desiredState);
+
+    const updatedIntent = await this.updatePaymentIntent(intent.id, {
+      status: nextState,
+      externalChargeId:
+        providerDetails.charges?.[0]?.id ??
+        providerDetails.qr_codes?.[0]?.id ??
+        intent.externalChargeId,
+      transactionRef:
+        providerDetails.charges?.[0]?.id ??
+        providerDetails.qr_codes?.[0]?.text ??
+        intent.transactionRef,
+      qrCodeText:
+        providerDetails.qr_codes?.[0]?.text ?? intent.qrCodeText ?? null,
+      qrCodeUrl:
+        providerDetails.qr_codes?.[0]?.links?.find(
+          (link: any) =>
+            link.rel === 'QR_CODE_IMAGE' || link.rel === 'QRCODE.PNG',
+        )?.href ??
+        intent.qrCodeUrl ??
+        null,
+      expiresAt: providerDetails.qr_codes?.[0]?.expiration_date
+        ? new Date(providerDetails.qr_codes[0].expiration_date)
+        : intent.expiresAt,
+      lastWebhookPayload: payload,
+      metadata: {
+        ...(intent.metadata as object | null),
+        providerStatus,
+      },
+    });
+
+    const order = await this.ordersService.findOneById(intent.orderId);
+    await this.syncTransactionFromIntent(order, updatedIntent);
+
+    if (updatedIntent.status === 'CONFIRMED') {
+      await this.markOrderPaid(order);
+    } else if (
+      updatedIntent.status === 'FAILED' ||
+      updatedIntent.status === 'CANCELLED' ||
+      updatedIntent.status === 'EXPIRED'
     ) {
-      this.logger.log(
-        `Status do pedido ${transaction.order.id} já está atualizado para ${newOrderStatus}.`,
-      );
-      return { message: 'Status já atualizado' };
+      await this.prisma.order.update({
+        where: { id: intent.orderId },
+        data: { status: OrderStatus.CANCELLED },
+      });
     }
 
-    await this.prisma.$transaction([
-      this.prisma.transaction.update({
-        where: { id: transaction.id },
-        data: { status: newOrderStatus },
-      }),
-      this.prisma.order.update({
-        where: { id: transaction.order.id },
-        data: { status: newOrderStatus },
-      }),
-    ]);
+    return { message: 'Status do pagamento atualizado com sucesso' };
+  }
 
-    this.logger.log(
-      `Status do pedido ${transaction.order.id} atualizado para ${newOrderStatus} via webhook do PagSeguro.`,
+  private async getPayableOrder(
+    orderId: string,
+    requesterId?: string,
+  ): Promise<OrderWithDetails> {
+    const order: OrderWithDetails = await this.ordersService.findOneById(orderId);
+
+    if (!order) {
+      throw new NotFoundException(`Pedido com ID ${orderId} nÃ£o encontrado.`);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestException(
+        'O pedido jÃ¡ foi pago ou estÃ¡ em outro status.',
+      );
+    }
+
+    this.ensureOrderOwnership(order, requesterId);
+    return order;
+  }
+
+  private requireBackendUrl(): string {
+    const backendUrl = this.configService.backendUrl;
+    if (!backendUrl) {
+      throw new InternalServerErrorException(
+        'A variÃ¡vel de ambiente BACKEND_URL nÃ£o estÃ¡ definida.',
+      );
+    }
+    return backendUrl;
+  }
+
+  private async runAntifraud(
+    order: OrderWithDetails,
+    customer: {
+      email: string;
+      fullName: string;
+      phone?: string;
+      cpf?: string;
+    },
+    paymentMethod: string,
+    cardDetails?: { brand?: string; installments?: number },
+  ) {
+    const antifraudResult = await this.antifraudService.analyzeTransaction({
+      orderId: order.id,
+      amount: order.totalAmount.toNumber(),
+      customerEmail: customer.email,
+      customerCpf: customer.cpf,
+      paymentMethod,
+      items: order.items.map((item) => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        price: item.price.toNumber(),
+      })),
+      ...(cardDetails ? { cardDetails } : {}),
+    });
+
+    if (antifraudResult.status === 'DENIED') {
+      throw new BadRequestException(
+        'TransaÃ§Ã£o negada pela anÃ¡lise antifraude.',
+      );
+    }
+
+    return antifraudResult;
+  }
+
+  private paymentIntentDelegate() {
+    return (this.prisma as any).paymentIntent;
+  }
+
+  private buildReferenceId(orderId: string, gateway: PaymentIntentGateway) {
+    return `${gateway}:${orderId}`;
+  }
+
+  private buildIdempotencyKey(orderId: string, gateway: PaymentIntentGateway) {
+    return `${gateway.toLowerCase()}:${orderId}`;
+  }
+
+  private async findPaymentIntent(
+    orderId: string,
+    gateway: PaymentIntentGateway,
+  ): Promise<PaymentIntentRecord | null> {
+    return this.paymentIntentDelegate().findFirst({
+      where: { orderId, gateway },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async findPaymentIntentByExternalId(
+    externalOrderId: string,
+  ): Promise<PaymentIntentRecord | null> {
+    return this.paymentIntentDelegate().findFirst({
+      where: { externalOrderId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async claimPaymentIntent(params: {
+    order: OrderWithDetails;
+    userId?: string;
+    gateway: PaymentIntentGateway;
+    description: string;
+    metadata?: Prisma.JsonValue;
+  }): Promise<PaymentIntentRecord> {
+    const { order, userId, gateway, description, metadata } = params;
+    const existingIntent = await this.findPaymentIntent(order.id, gateway);
+
+    if (existingIntent) {
+      return existingIntent;
+    }
+
+    return this.paymentIntentDelegate().create({
+      data: {
+        orderId: order.id,
+        userId: order.userId ?? userId ?? null,
+        gateway,
+        status: 'PENDING',
+        amount: order.totalAmount,
+        currency: 'BRL',
+        referenceId: this.buildReferenceId(order.id, gateway),
+        idempotencyKey: this.buildIdempotencyKey(order.id, gateway),
+        description,
+        metadata,
+      },
+    });
+  }
+
+  private async updatePaymentIntent(
+    intentId: string,
+    data: Partial<PaymentIntentRecord>,
+  ): Promise<PaymentIntentRecord> {
+    const current = await this.paymentIntentDelegate().findUnique({
+      where: { id: intentId },
+    });
+    if (!current) {
+      throw new NotFoundException('Payment intent nÃ£o encontrado.');
+    }
+
+    const nextStatus = data.status
+      ? this.applyTransition(current.status, data.status)
+      : current.status;
+
+    return this.paymentIntentDelegate().update({
+      where: { id: intentId },
+      data: {
+        ...data,
+        status: nextStatus,
+      },
+    });
+  }
+
+  private applyTransition(
+    current: PaymentIntentStatus,
+    desired: PaymentIntentStatus,
+  ): PaymentIntentStatus {
+    if (current === desired) {
+      return current;
+    }
+
+    const allowed = PAYMENT_TRANSITIONS[current] ?? [];
+    if (!allowed.includes(desired)) {
+      throw new BadRequestException(
+        `TransiÃ§Ã£o de payment intent invÃ¡lida: ${current} -> ${desired}.`,
+      );
+    }
+
+    return desired;
+  }
+
+  private mapExternalStatusToIntentStatus(
+    externalStatus?: string,
+  ): PaymentIntentStatus {
+    switch ((externalStatus || '').toUpperCase()) {
+      case 'PAID':
+      case 'APPROVED':
+      case 'CONFIRMED':
+      case 'COMPLETED':
+        return 'CONFIRMED';
+      case 'CANCELED':
+      case 'CANCELLED':
+      case 'ABORTED':
+        return 'CANCELLED';
+      case 'EXPIRED':
+        return 'EXPIRED';
+      case 'DECLINED':
+      case 'DENIED':
+      case 'FAILED':
+      case 'NOT_PAID':
+        return 'FAILED';
+      default:
+        return 'PENDING';
+    }
+  }
+
+  private async syncTransactionFromIntent(
+    order: OrderWithDetails,
+    intent: PaymentIntentRecord,
+    antifraudStatus?: string,
+  ): Promise<Transaction & { order: Order | null }> {
+    const existingTransaction = await this.prisma.transaction.findUnique({
+      where: { orderId: order.id },
+      include: { order: true },
+    });
+    const transactionStatus = this.mapIntentStatusToTransactionStatus(
+      intent.status,
+      intent.gateway,
     );
 
-    try {
-      const recipientEmail = transaction.order.userId
-        ? (await this.ordersService.findOneById(transaction.order.id)).user
-            ?.email
-        : transaction.order.guestEmail;
+    if (existingTransaction) {
+      return this.prisma.transaction.update({
+        where: { id: existingTransaction.id },
+        data: {
+          status: transactionStatus,
+          description: intent.description ?? existingTransaction.description,
+          gatewayTransactionId:
+            intent.externalOrderId ?? existingTransaction.gatewayTransactionId,
+          transactionRef: intent.transactionRef ?? existingTransaction.transactionRef,
+          qrCodeUrl: intent.qrCodeUrl ?? existingTransaction.qrCodeUrl,
+          antifraudStatus: antifraudStatus ?? existingTransaction.antifraudStatus,
+          paymentIntentId: intent.id,
+        },
+        include: { order: true },
+      });
+    }
 
+    return this.prisma.transaction.create({
+      data: {
+        userId: order.userId || null,
+        orderId: order.id,
+        amount: order.totalAmount,
+        type: TransactionType.PAYMENT,
+        status: transactionStatus,
+        description: intent.description ?? `Pagamento para Pedido #${order.id}`,
+        gatewayTransactionId: intent.externalOrderId ?? null,
+        transactionRef: intent.transactionRef ?? null,
+        qrCodeUrl: intent.qrCodeUrl ?? null,
+        antifraudStatus: antifraudStatus ?? null,
+        paymentIntentId: intent.id,
+      },
+      include: { order: true },
+    });
+  }
+
+  private mapIntentStatusToTransactionStatus(
+    status: PaymentIntentStatus,
+    gateway: PaymentIntentGateway,
+  ): string {
+    switch (status) {
+      case 'CONFIRMED':
+        return OrderStatus.PAID;
+      case 'FAILED':
+        return 'FAILED';
+      case 'CANCELLED':
+        return OrderStatus.CANCELLED;
+      case 'EXPIRED':
+        return 'EXPIRED';
+      default:
+        return gateway === 'PAGSEGURO_REDIRECT' ? 'PENDING_REDIRECT' : 'PENDING';
+    }
+  }
+
+  private async fetchProviderDetails(intent: PaymentIntentRecord): Promise<any> {
+    if (!intent.externalOrderId) {
+      return { status: intent.status };
+    }
+
+    if (intent.gateway === 'PAGSEGURO_REDIRECT') {
+      return this.pagSeguroService.getCheckoutDetails(intent.externalOrderId);
+    }
+
+    return this.pagSeguroService.getOrderDetails(intent.externalOrderId);
+  }
+
+  private async markOrderPaid(order: OrderWithDetails) {
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.PAID },
+    });
+
+    try {
+      const recipientEmail = order.user?.email ?? order.guestEmail;
       if (recipientEmail) {
-        if (newOrderStatus === OrderStatus.PAID) {
-          await this.notificationsService.sendPaymentConfirmationEmail(
-            recipientEmail,
-            transaction.order.id,
-            transaction.order.totalAmount.toNumber(),
-          );
-        } else if (newOrderStatus === OrderStatus.CANCELLED) {
-          await this.notificationsService.sendPaymentCancellationEmail(
-            recipientEmail,
-            transaction.order.id,
-          );
-        }
+        await this.notificationsService.sendPaymentConfirmationEmail(
+          recipientEmail,
+          order.id,
+          order.totalAmount.toNumber(),
+        );
       }
     } catch (emailError) {
       this.logger.error(
-        `Falha ao enviar e-mail de status de pagamento para o pedido ${transaction.order.id}: ${emailError.message}`,
+        `Falha ao enviar e-mail de confirmaÃ§Ã£o de pagamento para o pedido ${order.id}: ${emailError.message}`,
       );
-    }
-
-    return { message: 'Status do pedido atualizado com sucesso' };
-  }
-
-  private async buildPixResponseFromTransaction(
-    transaction: Transaction,
-  ): Promise<PixChargeResponseDto> {
-    if (!transaction.gatewayTransactionId) {
-      throw new InternalServerErrorException(
-        'Transação existente sem ID do PagSeguro.',
-      );
-    }
-
-    try {
-      const checkout = await this.pagSeguroService.getOrderDetails(
-        transaction.gatewayTransactionId,
-      );
-      const qrCode = checkout.qr_codes?.[0];
-      const status = this.mapPixStatus(qrCode?.status || transaction.status);
-      const brCode = qrCode?.text || transaction.transactionRef || '';
-      const qrCodeImage =
-        qrCode?.links?.find((link: any) => link.rel === 'QR_CODE_IMAGE')
-          ?.href ??
-        transaction.qrCodeUrl ??
-        '';
-      const expiresAt =
-        qrCode?.expiration_date ?? transaction.updatedAt.toISOString();
-
-      return {
-        transactionId: transaction.gatewayTransactionId,
-        status,
-        brCode,
-        qrCodeImage,
-        expiresAt,
-        amount: transaction.amount.toNumber(),
-        description: transaction.description ?? '',
-        orderId: transaction.orderId ?? '',
-      };
-    } catch (error) {
-      this.logger.warn(
-        `[PaymentsService] Não foi possível reconstruir cobrança PIX existente para o pedido ${transaction.orderId}: ${error.message}`,
-      );
-      return {
-        transactionId: transaction.gatewayTransactionId,
-        status: this.mapPixStatus(transaction.status),
-        brCode: transaction.transactionRef ?? '',
-        qrCodeImage: transaction.qrCodeUrl ?? '',
-        expiresAt: transaction.updatedAt.toISOString(),
-        amount: transaction.amount.toNumber(),
-        description: transaction.description ?? '',
-        orderId: transaction.orderId ?? '',
-      };
     }
   }
 
-  private async buildExistingDirectCardResponse(
-    transaction: Transaction,
-  ): Promise<any> {
-    if (!transaction.gatewayTransactionId) {
-      throw new InternalServerErrorException(
-        'Transação existente sem ID do PagSeguro.',
-      );
-    }
-
-    try {
-      const checkout = await this.pagSeguroService.getCheckoutDetails(
-        transaction.gatewayTransactionId,
-      );
-      const charge = checkout.charges?.[0];
-      return {
-        transactionId: transaction.gatewayTransactionId,
-        status: charge?.status ?? checkout.status ?? transaction.status,
-        transactionRef: charge?.id ?? transaction.transactionRef,
-        amount: transaction.amount.toNumber(),
-        description: transaction.description ?? '',
-        orderId: transaction.orderId ?? '',
-      };
-    } catch (error) {
-      this.logger.warn(
-        `[PaymentsService] Não foi possível reconstruir pagamento com cartão existente para o pedido ${transaction.orderId}: ${error.message}`,
-      );
-      return {
-        transactionId: transaction.gatewayTransactionId,
-        status: transaction.status,
-        transactionRef: transaction.transactionRef ?? '',
-        amount: transaction.amount.toNumber(),
-        description: transaction.description ?? '',
-        orderId: transaction.orderId ?? '',
-      };
-    }
+  private buildPixResponseFromIntent(
+    intent: PaymentIntentRecord,
+  ): PixChargeResponseDto {
+    return {
+      transactionId: intent.externalOrderId ?? intent.id,
+      status: this.mapIntentStatusToPixStatus(intent.status),
+      brCode: intent.qrCodeText ?? intent.transactionRef ?? '',
+      qrCodeImage: intent.qrCodeUrl ?? '',
+      expiresAt:
+        intent.expiresAt?.toISOString() ?? intent.updatedAt.toISOString(),
+      amount: new Decimal(intent.amount).toNumber(),
+      description: intent.description ?? '',
+      orderId: intent.orderId,
+    };
   }
 
-  private async buildExistingRedirectResponse(
-    transaction: Transaction,
-  ): Promise<{ redirectUrl: string; pagSeguroCheckoutId: string }> {
-    if (!transaction.gatewayTransactionId) {
-      throw new InternalServerErrorException(
-        'Transação existente sem ID do PagSeguro.',
-      );
-    }
+  private buildCardResponseFromIntent(intent: PaymentIntentRecord) {
+    return {
+      paymentIntentId: intent.id,
+      transactionId: intent.externalOrderId ?? intent.id,
+      status: this.mapIntentStatusToTransactionStatus(intent.status, intent.gateway),
+      transactionRef: intent.transactionRef ?? intent.externalChargeId ?? '',
+      amount: new Decimal(intent.amount).toNumber(),
+      description: intent.description ?? '',
+      orderId: intent.orderId,
+    };
+  }
 
-    try {
-      const checkout = await this.pagSeguroService.getCheckoutDetails(
-        transaction.gatewayTransactionId,
-      );
-      const payLink = checkout.links?.find((link: any) => link.rel === 'PAY');
-      return {
-        redirectUrl: payLink?.href ?? transaction.transactionRef ?? '',
-        pagSeguroCheckoutId: checkout.id ?? transaction.gatewayTransactionId,
-      };
-    } catch (error) {
-      this.logger.warn(
-        `[PaymentsService] Não foi possível reconstruir checkout existente para o pedido ${transaction.orderId}: ${error.message}`,
-      );
-      return {
-        redirectUrl: transaction.transactionRef ?? '',
-        pagSeguroCheckoutId: transaction.gatewayTransactionId,
-      };
+  private buildRedirectResponseFromIntent(intent: PaymentIntentRecord) {
+    return {
+      redirectUrl: intent.transactionRef ?? '',
+      paymentIntentId: intent.id,
+    };
+  }
+
+  private mapIntentStatusToPixStatus(
+    status: PaymentIntentStatus,
+  ): PixChargeResponseDto['status'] {
+    switch (status) {
+      case 'CONFIRMED':
+        return 'COMPLETED';
+      case 'CANCELLED':
+        return 'CANCELED';
+      case 'EXPIRED':
+        return 'EXPIRED';
+      case 'FAILED':
+        return 'FAILED';
+      default:
+        return 'PENDING';
     }
   }
 
   private buildPagSeguroPayload(order: OrderWithDetails) {
     const customerEmail = order.user?.email ?? order.guestEmail ?? '';
-    const customerFullName = order.user?.name ?? 'Cliente Convidado';
+    const customerFullName =
+      order.user?.name ?? order.guestName ?? 'Cliente Convidado';
     const customerPhone =
       (order.user?.phone ?? order.guestPhone ?? '').trim() || undefined;
     const customerCpf = order.user?.cpf ?? order.guestCpf ?? undefined;
@@ -670,7 +855,7 @@ export class PaymentsService {
   private ensureOrderOwnership(order: OrderWithDetails, requesterId?: string) {
     if (order.userId) {
       if (!requesterId || order.userId !== requesterId) {
-        throw new BadRequestException('Acesso não autorizado a este pedido.');
+        throw new BadRequestException('Acesso nÃ£o autorizado a este pedido.');
       }
       return;
     }
@@ -683,58 +868,19 @@ export class PaymentsService {
 
     if (!requesterId || order.guestId !== requesterId) {
       throw new BadRequestException(
-        'Acesso não autorizado ao pedido de convidado.',
+        'Acesso nÃ£o autorizado ao pedido de convidado.',
       );
     }
   }
 
-  private async getExistingPaymentTransaction(
-    orderId: string,
-  ): Promise<Transaction | null> {
-    return this.prisma.transaction.findUnique({
-      where: { orderId },
-    });
-  }
-
-  private mapPixStatus(
-    externalStatus?: string,
-  ): PixChargeResponseDto['status'] {
-    switch (externalStatus) {
-      case 'PAID':
-      case 'CONFIRMED':
-      case 'COMPLETED':
-        return 'COMPLETED';
-      case 'CANCELED':
-        return 'CANCELED';
-      case 'EXPIRED':
-        return 'EXPIRED';
-      case 'FAILED':
-        return 'FAILED';
-      default:
-        return 'PENDING';
+  private rethrowProviderError(error: any, fallbackMessage: string): never {
+    this.logger.error(error?.message ?? fallbackMessage, error?.stack);
+    if (
+      error instanceof InternalServerErrorException &&
+      error.message.startsWith('Falha no PagSeguro:')
+    ) {
+      throw error;
     }
-  }
-
-  private mapPagSeguroStatusToOrderStatus(
-    pagSeguroStatus: string,
-  ): OrderStatus {
-    switch (pagSeguroStatus) {
-      case 'PAID':
-      case 'APPROVED':
-        return OrderStatus.PAID;
-      case 'IN_ANALYSIS':
-      case 'PENDING':
-        return OrderStatus.PENDING;
-      case 'CANCELED':
-      case 'ABORTED':
-        return OrderStatus.CANCELLED;
-      case 'REFUNDED':
-      case 'SHIPPED':
-        return OrderStatus.SHIPPED;
-      case 'DELIVERED':
-        return OrderStatus.DELIVERED;
-      default:
-        return OrderStatus.PENDING;
-    }
+    throw new InternalServerErrorException(fallbackMessage);
   }
 }
