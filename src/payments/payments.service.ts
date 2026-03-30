@@ -669,7 +669,7 @@ export class PaymentsService {
     order: OrderWithDetails,
     intent: PaymentIntentRecord,
     antifraudStatus?: string,
-  ): Promise<Transaction & { order: Order | null }> {
+  ): Promise<Transaction> {
     const existingTransaction = await this.prisma.transaction.findUnique({
       where: { orderId: order.id },
       include: { order: true },
@@ -690,9 +690,7 @@ export class PaymentsService {
           transactionRef: intent.transactionRef ?? existingTransaction.transactionRef,
           qrCodeUrl: intent.qrCodeUrl ?? existingTransaction.qrCodeUrl,
           antifraudStatus: antifraudStatus ?? existingTransaction.antifraudStatus,
-          paymentIntentId: intent.id,
         },
-        include: { order: true },
       });
     }
 
@@ -708,9 +706,7 @@ export class PaymentsService {
         transactionRef: intent.transactionRef ?? null,
         qrCodeUrl: intent.qrCodeUrl ?? null,
         antifraudStatus: antifraudStatus ?? null,
-        paymentIntentId: intent.id,
       },
-      include: { order: true },
     });
   }
 
