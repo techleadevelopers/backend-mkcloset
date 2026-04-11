@@ -124,7 +124,7 @@ export class PaymentsService {
       order,
       userId,
       gateway: 'PAGSEGURO_PIX',
-      description: `CobranÃ§a PIX para Pedido #${order.id}`,
+      description: `Cobrança PIX para Pedido #${order.id}`,
       metadata: { paymentMethod: 'PIX' },
     });
 
@@ -530,7 +530,7 @@ export class PaymentsService {
 
     if (antifraudResult.status === 'DENIED') {
       throw new BadRequestException(
-        'TransaÃ§Ã£o negada pela anÃ¡lise antifraude.',
+        'Transação negada pela análise antifraude.',
       );
     }
 
@@ -633,7 +633,7 @@ export class PaymentsService {
     const allowed = PAYMENT_TRANSITIONS[current] ?? [];
     if (!allowed.includes(desired)) {
       throw new BadRequestException(
-        `TransiÃ§Ã£o de payment intent invÃ¡lida: ${current} -> ${desired}.`,
+        `Transição de payment intent inválida: ${current} -> ${desired}.`,
       );
     }
 
@@ -757,7 +757,7 @@ export class PaymentsService {
       }
     } catch (emailError) {
       this.logger.error(
-        `Falha ao enviar e-mail de confirmaÃ§Ã£o de pagamento para o pedido ${order.id}: ${emailError.message}`,
+        `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${emailError.message}`,
       );
     }
   }
