@@ -192,7 +192,7 @@ export class PaymentsService {
 
     if (!cardToken || !cardHolderName || !cardCpf) {
       throw new BadRequestException(
-        'Dados do cartÃ£o incompletos para processamento direto.',
+        'Dados do carão incompletos para processamento direto.',
       );
     }
 
@@ -204,7 +204,7 @@ export class PaymentsService {
 
     if (existingIntent) {
       this.logger.log(
-        `Intent de cartÃ£o jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
+        `Intent de cartão já¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
       return this.buildCardResponseFromIntent(existingIntent);
     }
@@ -226,7 +226,7 @@ export class PaymentsService {
       order,
       userId,
       gateway: 'PAGSEGURO_CARD',
-      description: `Pagamento com CartÃ£o de CrÃ©dito para Pedido #${order.id}`,
+      description: `Pagamento com Cartão de Crédito para Pedido #${order.id}`,
       metadata: {
         paymentMethod: 'CREDIT_CARD',
         cardBrand: cardBrand ?? null,
@@ -291,7 +291,7 @@ export class PaymentsService {
       });
       throw this.rethrowProviderError(
         error,
-        'Falha ao processar pagamento com cartÃ£o de crÃ©dito.',
+        'Falha ao processar pagamento com cartão de crédito.',
       );
     }
   }
@@ -415,7 +415,7 @@ export class PaymentsService {
         `Webhook recebido para ${pagSeguroCheckoutId}, mas nenhum payment intent correspondente foi encontrado.`,
       );
       throw new NotFoundException(
-        'Payment intent nÃ£o encontrado para o identificador recebido.',
+        'Payment intent não encontrado para o identificador recebido.',
       );
     }
 
@@ -480,7 +480,7 @@ export class PaymentsService {
     const order: OrderWithDetails = await this.ordersService.findOneById(orderId);
 
     if (!order) {
-      throw new NotFoundException(`Pedido com ID ${orderId} nÃ£o encontrado.`);
+      throw new NotFoundException(`Pedido com ID ${orderId} não encontrado.`);
     }
 
     if (order.status !== OrderStatus.PENDING) {
@@ -497,7 +497,7 @@ export class PaymentsService {
     const backendUrl = this.configService.backendUrl;
     if (!backendUrl) {
       throw new InternalServerErrorException(
-        'A variÃ¡vel de ambiente BACKEND_URL nÃ£o estÃ¡ definida.',
+        'A variável de ambiente BACKEND_URL não está definida.',
       );
     }
     return backendUrl;
@@ -606,7 +606,7 @@ export class PaymentsService {
       where: { id: intentId },
     });
     if (!current) {
-      throw new NotFoundException('Payment intent nÃ£o encontrado.');
+      throw new NotFoundException('Payment intent não encontrado.');
     }
 
     const nextStatus = data.status
@@ -741,9 +741,22 @@ export class PaymentsService {
   }
 
   private async markOrderPaid(order: OrderWithDetails) {
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { status: OrderStatus.PAID },
+    if (order.status === OrderStatus.PAID) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (prisma) => {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: OrderStatus.PAID },
+      });
+
+      for (const item of order.items) {
+        await prisma.product.update({
+          where: { id: item.product.id },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
     });
 
     try {
@@ -851,7 +864,7 @@ export class PaymentsService {
   private ensureOrderOwnership(order: OrderWithDetails, requesterId?: string) {
     if (order.userId) {
       if (!requesterId || order.userId !== requesterId) {
-        throw new BadRequestException('Acesso nÃ£o autorizado a este pedido.');
+        throw new BadRequestException('Acesso não autorizado a este pedido.');
       }
       return;
     }
@@ -864,7 +877,7 @@ export class PaymentsService {
 
     if (!requesterId || order.guestId !== requesterId) {
       throw new BadRequestException(
-        'Acesso nÃ£o autorizado ao pedido de convidado.',
+        'Acesso não autorizado ao pedido de convidado.',
       );
     }
   }
