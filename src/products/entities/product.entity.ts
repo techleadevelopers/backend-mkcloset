@@ -16,6 +16,7 @@ export class ProductEntity
   price: number; // Alterado para number para ser usado no frontend/cálculos
   originalPrice: number | null; // Alterado para number
   imageUrl: string;
+  imgBanner: string | null;
   images: string[];
   categoryId: string;
   sizes: string[];
