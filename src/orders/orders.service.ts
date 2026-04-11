@@ -338,11 +338,7 @@ export class OrdersService {
           },
         });
 
-        // Decrementar estoque
-        await prisma.product.update({
-          where: { id: itemData.productId },
-          data: { stock: { decrement: itemData.quantity } },
-        });
+        // Estoque será decrementado após confirmação do pagamento
       }
 
       // Limpar o carrinho (do usuário ou do convidado)
