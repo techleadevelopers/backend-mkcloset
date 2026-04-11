@@ -48,18 +48,26 @@ export class PaymentsController {
   }
 
   @Post('initiate-checkout/:orderId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard)
   async initiatePagSeguroCheckout(
     @CurrentUser() user: User | undefined,
     @Param('orderId') orderId: string,
+    @Body() body: { guestId?: string; signature?: string },
   ) {
-    if (!user?.id) {
+    const requesterId = user?.id ?? body?.guestId;
+    if (!requesterId) {
       throw new BadRequestException(
-        'Apenas usuários autenticados podem iniciar o checkout redirecionado.',
+        'Usuário ou ID de convidado não fornecido.',
+      );
+    }
+    if (!user?.id) {
+      this.verifyGuest(
+        body?.guestId,
+        body?.signature || (body as any)?.['x-guest-signature'],
       );
     }
     return this.paymentsService.initiatePagSeguroRedirectCheckout(
-      user?.id,
+      requesterId,
       orderId,
     );
   }
