@@ -26,6 +26,21 @@ enum TransactionType {
   REFUND     // Reembolso de um pedido
 }
 
+enum PaymentGateway {
+  PAGSEGURO_PIX
+  PAGSEGURO_CARD
+  PAGSEGURO_REDIRECT
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
 // NOVO: Enum para papéis de usuário
 enum Role {
   USER   // Usuário comum
@@ -49,6 +64,7 @@ model User {
   cart       Cart?
   wishlist   Wishlist?
   transactions Transaction[]
+  paymentIntents PaymentIntent[]
 }
 
 // Endereços de Usuários
@@ -88,6 +104,7 @@ model Product {
   price         Decimal        @db.Decimal(10, 2)
   originalPrice Decimal?       @db.Decimal(10, 2)
   images        String[]       @default([]) // Array de URLs de imagens
+  imgBanner String? @db.Text
   categoryId    String
   category      Category       @relation(fields: [categoryId], references: [id])
   sizes         String[]       @default([]) // Ex: ["P", "M", "G"]
@@ -182,6 +199,7 @@ model Order {
   items                       OrderItem[]
 
   transaction             Transaction?
+  paymentIntents          PaymentIntent[]
 
   couponId                String?
   coupon                  Coupon?   @relation(fields: [couponId], references: [id])
@@ -227,8 +245,41 @@ model Transaction {
   transactionRef       String?
   antifraudStatus      String?       // NOVO: Campo para o status da análise antifraude (ex: PENDING_REVIEW, ACCEPTED, DENIED)
 
+  paymentIntentId      String?       @unique
+  paymentIntent        PaymentIntent? @relation(fields: [paymentIntentId], references: [id])
+
   couponId             String?
   coupon               Coupon?       @relation(fields: [couponId], references: [id])
+}
+
+model PaymentIntent {
+  id                 String              @id @default(uuid())
+  userId             String?
+  user               User?               @relation(fields: [userId], references: [id])
+  orderId            String
+  order              Order               @relation(fields: [orderId], references: [id])
+  gateway            PaymentGateway
+  status             PaymentIntentStatus @default(CREATED)
+  amount             Decimal             @db.Decimal(10, 2)
+  currency           String              @default("BRL")
+  referenceId        String              @unique
+  idempotencyKey     String?             @unique
+  externalOrderId    String?             @unique
+  externalChargeId   String?
+  transactionRef     String?
+  qrCodeText         String?
+  qrCodeUrl          String?
+  expiresAt          DateTime?
+  lastWebhookPayload Json?
+  description        String?
+  metadata           Json?
+  transaction        Transaction?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
 }
 
 // NOVO: Modelo para Cupons de Desconto
