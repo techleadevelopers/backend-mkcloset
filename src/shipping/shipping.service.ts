@@ -32,13 +32,15 @@ export class ShippingService {
       const viaCepResponse = await axios.get(
         `https://viacep.com.br/ws/${cleanZip}/json/`,
       );
-      if (viaCepResponse.data.erro) {
+      if (viaCepResponse.data?.erro) {
         throw new BadRequestException('CEP não encontrado.');
       }
     } catch (error) {
-      throw new BadRequestException(
-        'Erro ao validar CEP. Verifique o CEP digitado.',
-      );
+      // Se for erro de CEP inexistente, mantém o bloqueio.
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      // Falha de rede/serviço: não bloquear o cálculo.
     }
 
     // Calcular informações totais do pacote
