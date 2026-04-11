@@ -31,6 +31,18 @@ export class NotificationsService {
     html: string,
     text?: string,
   ): Promise<void> {
+    if (!this.configService.emailServiceHost) {
+      this.logger.warn(
+        `E-mail desativado: EMAIL_SERVICE_HOST nÃ£o configurado. Ignorando envio para ${to}.`,
+      );
+      return;
+    }
+    if (!this.configService.emailServiceUser || !this.configService.emailServicePass) {
+      this.logger.warn(
+        `E-mail desativado: credenciais nÃ£o configuradas. Ignorando envio para ${to}.`,
+      );
+      return;
+    }
     const mailOptions = {
       from: this.configService.emailServiceFrom,
       to,
