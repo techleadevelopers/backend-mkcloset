@@ -25,7 +25,6 @@ async function bootstrap() {
       }
     });
 
-    // 1. Adicione esta linha para definir o prefixo global da API
     app.setGlobalPrefix('api');
 
     const configService = app.get(ConfigService);
