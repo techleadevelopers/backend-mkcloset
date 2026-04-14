@@ -52,6 +52,10 @@ export class ProductsService {
       where.isFeatured = query.isFeatured;
     }
 
+    if (query.onSale) {
+      where.discount = { gt: 0 };
+    }
+
     if (categorySlug) {
       where.category = { is: { slug: categorySlug } };
     } else if (categoryId) {
