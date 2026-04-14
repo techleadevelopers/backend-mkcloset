@@ -3,7 +3,8 @@ export class AppConstants {
   static readonly MIN_CORREIOS_LENGTH_CM = 16;
   static readonly MIN_CORREIOS_WIDTH_CM = 11;
   static readonly MIN_CORREIOS_HEIGHT_CM = 2;
-  static readonly FREE_SHIPPING_THRESHOLD = 199.0; // Valor para frete grátis
+  static readonly FREE_SHIPPING_THRESHOLD = 500.0; // Valor para frete gratis
+  static readonly FREE_SHIPPING_STATE = 'SP';
   static readonly DEFAULT_PRODUCT_WEIGHT_KG = 0.3; // 300g
   static readonly DEFAULT_PRODUCT_DIMENSION_CM = {
     length: 20,
