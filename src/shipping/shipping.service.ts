@@ -28,6 +28,7 @@ export class ShippingService {
 
     // Validação básica de CEP via ViaCEP (simulada ou real)
     const cleanZip = zipCode.replace(/\D/g, '');
+    let destinationState: string | undefined;
     try {
       const viaCepResponse = await axios.get(
         `https://viacep.com.br/ws/${cleanZip}/json/`,
@@ -35,6 +36,8 @@ export class ShippingService {
       // ViaCEP é apenas informativo. Mesmo se não encontrar, não bloqueia o cálculo.
       if (viaCepResponse.data?.erro) {
         // noop
+      } else {
+        destinationState = viaCepResponse.data?.uf;
       }
     } catch {
       // Falha de rede/serviço: não bloquear o cálculo.
@@ -132,17 +135,21 @@ export class ShippingService {
       pacPrice += insurance;
     }
 
+    const isEligibleForFreeShipping =
+      destinationState === AppConstants.FREE_SHIPPING_STATE &&
+      packageInfo.value >= AppConstants.FREE_SHIPPING_THRESHOLD;
+
     const options: ShippingOption[] = [
       {
         service: '40010',
         serviceName: 'SEDEX',
-        price: parseFloat(sedexPrice.toFixed(2)),
+        price: isEligibleForFreeShipping ? 0 : parseFloat(sedexPrice.toFixed(2)),
         deliveryTime: sedexTime,
       },
       {
         service: '41106',
         serviceName: 'PAC',
-        price: parseFloat(pacPrice.toFixed(2)),
+        price: isEligibleForFreeShipping ? 0 : parseFloat(pacPrice.toFixed(2)),
         deliveryTime: pacTime,
       },
     ];
@@ -150,7 +157,7 @@ export class ShippingService {
     return {
       zipCode: cleanZip,
       options,
-      freeShipping: packageInfo.value >= AppConstants.FREE_SHIPPING_THRESHOLD,
+      freeShipping: isEligibleForFreeShipping,
       freeShippingThreshold: AppConstants.FREE_SHIPPING_THRESHOLD,
     };
   }
