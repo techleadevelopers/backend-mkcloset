@@ -957,4 +957,3 @@ export class PagSeguroService {
     }
   }
 }
-
