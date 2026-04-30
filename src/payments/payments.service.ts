@@ -172,7 +172,7 @@ export class PaymentsService {
         status: 'FAILED',
         metadata: {
           ...(intent.metadata as object | null),
-          error: error.message,
+          error: (error as Error).message,  // <-- CORRIGIDO
         },
       });
       throw this.rethrowProviderError(
@@ -286,7 +286,7 @@ export class PaymentsService {
         status: 'FAILED',
         metadata: {
           ...(intent.metadata as object | null),
-          error: error.message,
+          error: (error as Error).message,  // <-- CORRIGIDO
         },
       });
       throw this.rethrowProviderError(
@@ -368,7 +368,7 @@ export class PaymentsService {
         status: 'FAILED',
         metadata: {
           ...(intent.metadata as object | null),
-          error: error.message,
+          error: (error as Error).message,  // <-- CORRIGIDO
         },
       });
       throw this.rethrowProviderError(
@@ -565,22 +565,22 @@ export class PaymentsService {
   }
 
   private async findPaymentIntent(
-    orderId: string,
-    gateway: PaymentIntentGateway,
-  ): Promise<PaymentIntentRecord | null> {
-    const [intent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
-      Prisma.sql`
-        SELECT *
-        FROM "PaymentIntent"
-        WHERE "orderId" = ${orderId}
-          AND "gateway" = ${gateway}::"PaymentIntentGateway"
-        ORDER BY "createdAt" DESC
-        LIMIT 1
-      `,
-    );
+  orderId: string,
+  gateway: PaymentIntentGateway,
+): Promise<PaymentIntentRecord | null> {
+  const [intent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
+    Prisma.sql`
+      SELECT *
+      FROM "PaymentIntent"
+      WHERE "orderId" = ${orderId}
+        AND "gateway" = ${gateway}
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `,
+  );
 
-    return intent ?? null;
-  }
+  return intent ?? null;
+}
 
   private async findPaymentIntentByExternalId(
     externalOrderId: string,
@@ -599,55 +599,55 @@ export class PaymentsService {
   }
 
   private async claimPaymentIntent(params: {
-    order: OrderWithDetails;
-    userId?: string;
-    gateway: PaymentIntentGateway;
-    description: string;
-    metadata?: Prisma.JsonValue;
-  }): Promise<PaymentIntentRecord> {
-    const { order, userId, gateway, description, metadata } = params;
-    const existingIntent = await this.findPaymentIntent(order.id, gateway);
+  order: OrderWithDetails;
+  userId?: string;
+  gateway: PaymentIntentGateway;
+  description: string;
+  metadata?: Prisma.JsonValue;
+}): Promise<PaymentIntentRecord> {
+  const { order, userId, gateway, description, metadata } = params;
+  const existingIntent = await this.findPaymentIntent(order.id, gateway);
 
-    if (existingIntent) {
-      return existingIntent;
-    }
-
-    const [intent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
-      Prisma.sql`
-        INSERT INTO "PaymentIntent" (
-          "id",
-          "userId",
-          "orderId",
-          "gateway",
-          "status",
-          "amount",
-          "currency",
-          "referenceId",
-          "idempotencyKey",
-          "description",
-          "metadata"
-        )
-        VALUES (
-  ${crypto.randomUUID()},
-  ${order.userId ?? userId ?? null},
-  ${order.id},
-  ${gateway}::"PaymentIntentGateway",
-  ${'PENDING'}::"PaymentIntentStatus",
-  ${order.totalAmount},
-  ${'BRL'},
-  ${this.buildReferenceId(order.id, gateway)},
-  ${this.buildIdempotencyKey(order.id, gateway)},
-  ${description},
-  ${metadata === undefined ? null : JSON.stringify(metadata)}::jsonb
-)
-        RETURNING *
-      `,
-    );
-
-    return intent;
+  if (existingIntent) {
+    return existingIntent;
   }
 
- private async updatePaymentIntent(
+  const [intent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
+    Prisma.sql`
+      INSERT INTO "PaymentIntent" (
+        "id",
+        "userId",
+        "orderId",
+        "gateway",
+        "status",
+        "amount",
+        "currency",
+        "referenceId",
+        "idempotencyKey",
+        "description",
+        "metadata"
+      )
+      VALUES (
+        ${crypto.randomUUID()},
+        ${order.userId ?? userId ?? null},
+        ${order.id},
+        ${gateway},  -- <-- AQUI SEM CAST!
+        ${'PENDING'}::"PaymentIntentStatus",
+        ${order.totalAmount},
+        ${'BRL'},
+        ${this.buildReferenceId(order.id, gateway)},
+        ${this.buildIdempotencyKey(order.id, gateway)},
+        ${description},
+        ${metadata === undefined ? null : JSON.stringify(metadata)}::jsonb
+      )
+      RETURNING *
+    `,
+  );
+
+  return intent;
+}
+
+private async updatePaymentIntent(
   intentId: string,
   data: Partial<PaymentIntentRecord>,
 ): Promise<PaymentIntentRecord> {
@@ -681,10 +681,6 @@ export class PaymentsService {
     
     if (key === 'status') {
       return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}::"PaymentIntentStatus"`;
-    }
-
-    if (key === 'gateway') {
-      return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}::"PaymentIntentGateway"`;
     }
     
     return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}`;
@@ -852,10 +848,10 @@ export class PaymentsService {
         );
       }
     } catch (emailError) {
-      this.logger.error(
-        `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${emailError.message}`,
-      );
-    }
+  this.logger.error(
+    `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${(emailError as Error).message}`,  // <-- CORRIGIDO
+  );
+}
   }
 
   private buildPixResponseFromIntent(
