@@ -72,7 +72,7 @@ export class ConfigService {
   get pagSeguroApiUrl(): string {
     return (
       this.nestConfigService.get<string>('PAGSEGURO_API_URL') ||
-      'https://api.pagseguro.com'
+      'https://sandbox.api.pagseguro.com'
     );
   }
 
