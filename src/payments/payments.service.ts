@@ -500,7 +500,6 @@ export class PaymentsService {
         'A variável de ambiente BACKEND_URL não está definida.',
       );
     }
-
     try {
       const parsedUrl = new URL(backendUrl);
       const apiPath = parsedUrl.pathname.includes('/api')
