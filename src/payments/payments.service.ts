@@ -112,6 +112,45 @@ export class PaymentsService {
       this.logger.log(
         `Intent PIX jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
+      if (
+        existingIntent.externalOrderId &&
+        (!existingIntent.qrCodeUrl || !existingIntent.qrCodeText)
+      ) {
+        try {
+          const providerDetails = await this.pagSeguroService.getOrderDetails(
+            existingIntent.externalOrderId,
+          );
+          const refreshedIntent = await this.updatePaymentIntent(
+            existingIntent.id,
+            {
+              externalChargeId:
+                providerDetails.qr_codes?.[0]?.id ??
+                existingIntent.externalChargeId,
+              transactionRef:
+                providerDetails.qr_codes?.[0]?.text ??
+                existingIntent.transactionRef,
+              qrCodeText:
+                providerDetails.qr_codes?.[0]?.text ??
+                existingIntent.qrCodeText,
+              qrCodeUrl:
+                providerDetails.qr_codes?.[0]?.links?.find(
+                  (link: any) =>
+                    link.rel === 'QR_CODE_IMAGE' || link.rel === 'QRCODE.PNG',
+                )?.href ?? existingIntent.qrCodeUrl,
+              expiresAt: providerDetails.qr_codes?.[0]?.expiration_date
+                ? new Date(providerDetails.qr_codes[0].expiration_date)
+                : existingIntent.expiresAt,
+            },
+          );
+          return this.buildPixResponseFromIntent(refreshedIntent);
+        } catch (error) {
+          this.logger.warn(
+            `Falha ao atualizar dados PIX do intent ${existingIntent.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
       return this.buildPixResponseFromIntent(existingIntent);
     }
 
