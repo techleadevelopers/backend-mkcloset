@@ -180,7 +180,7 @@ export class PagSeguroService {
     // Carrega a URL base da API do PagSeguro (ex: https://sandbox.api.pagseguro.com)
     this.pagSeguroBaseApiUrl =
       this.configService.get<string>('PAGSEGURO_API_URL') ||
-      'https://sandbox.api.pagseguro.com';
+      'https://api.pagseguro.com';
     this.pagSeguroToken = this.configService.get<string>(
       'PAGSEGURO_API_TOKEN',
     )!;
