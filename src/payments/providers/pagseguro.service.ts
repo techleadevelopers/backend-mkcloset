@@ -1,4 +1,4 @@
-// src/payments/providers/pagseguro.service.ts
+﻿// src/payments/providers/pagseguro.service.ts
 import {
   Injectable,
   BadRequestException,
@@ -34,7 +34,7 @@ type CardGatewayResponse = {
 
 // Interface para os detalhes de um item no checkout do PagSeguro
 interface PagSeguroCheckoutItem {
-  reference_id?: string; // ID de referência do item (opcional)
+  reference_id?: string; // ID de referÃªncia do item (opcional)
   name: string;
   quantity: number;
   unit_amount: number; // Valor em centavos
@@ -53,7 +53,7 @@ interface PagSeguroCheckoutCustomer {
   }>;
 }
 
-// Interface para o endereço no checkout do PagSeguro
+// Interface para o endereÃ§o no checkout do PagSeguro
 interface PagSeguroCheckoutAddress {
   country: string;
   region_code: string; // Estado (ex: SP)
@@ -69,13 +69,13 @@ interface PagSeguroCheckoutAddress {
 interface PagSeguroCheckoutShipping {
   address: PagSeguroCheckoutAddress;
   type: 'FIXED' | 'FREE' | 'WEIGHT'; // Tipo de frete
-  service_type: string; // Serviço de frete (ex: SEDEX, PAC)
+  service_type: string; // ServiÃ§o de frete (ex: SEDEX, PAC)
   amount: number; // Custo do frete em centavos
   estimated_delivery_time_in_days?: number;
-  address_modifiable?: boolean; // Se o cliente pode modificar o endereço na página do PagSeguro
+  address_modifiable?: boolean; // Se o cliente pode modificar o endereÃ§o na pÃ¡gina do PagSeguro
 }
 
-// Interface para os detalhes necessários para criar um checkout de redirecionamento
+// Interface para os detalhes necessÃ¡rios para criar um checkout de redirecionamento
 interface CreatePagSeguroCheckoutRedirectDetails {
   orderId: string; // Seu ID de pedido interno, usado como reference_id
   amount: Prisma.Decimal; // Valor total do pedido, incluindo frete
@@ -100,11 +100,11 @@ interface CreatePagSeguroCheckoutRedirectDetails {
   items: Array<{
     name: string;
     quantity: number;
-    unit_amount: Prisma.Decimal; // Preço unitário do item
+    unit_amount: Prisma.Decimal; // PreÃ§o unitÃ¡rio do item
   }>;
 }
 
-// Interface para os detalhes necessários para criar uma cobrança PIX
+// Interface para os detalhes necessÃ¡rios para criar uma cobranÃ§a PIX
 interface CreatePagSeguroPixChargeDetails {
   orderId: string;
   amount: Prisma.Decimal;
@@ -133,7 +133,7 @@ interface CreatePagSeguroPixChargeDetails {
   }>;
 }
 
-// NOVO: Interface para os detalhes necessários para processar pagamento direto com cartão
+// NOVO: Interface para os detalhes necessÃ¡rios para processar pagamento direto com cartÃ£o
 interface CreatePagSeguroCreditCardChargeDetails {
   orderId: string;
   amount: Prisma.Decimal;
@@ -173,8 +173,15 @@ export class PagSeguroService {
   private readonly logger = new Logger(PagSeguroService.name);
   private pagSeguroBaseApiUrl: string; // URL base da API (sem /checkouts)
   private pagSeguroToken: string;
-  private pagSeguroEmail: string; // Email da conta PagSeguro, se necessário para alguma API
+  private pagSeguroEmail: string; // Email da conta PagSeguro, se necessÃ¡rio para alguma API
   private redirectBaseUrl: string; // URL base do frontend (ngrok)
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return this.getErrorMessage(error);
+    }
+    return String(error);
+  }
 
   constructor(private configService: ConfigService) {
     // Carrega a URL base da API do PagSeguro (ex: https://sandbox.api.pagseguro.com)
@@ -184,19 +191,19 @@ export class PagSeguroService {
     this.pagSeguroToken = this.configService.get<string>(
       'PAGSEGURO_API_TOKEN',
     )!;
-    this.pagSeguroEmail = this.configService.get<string>('PAGSEGURO_EMAIL')!; // Pode ser necessário para APIs mais antigas ou específicas
+    this.pagSeguroEmail = this.configService.get<string>('PAGSEGURO_EMAIL')!; // Pode ser necessÃ¡rio para APIs mais antigas ou especÃ­ficas
 
     // Carrega as URLs do ngrok do .env
     this.redirectBaseUrl = this.configService.get<string>('FRONTEND_URL')!; // Usando FRONTEND_URL
     // REMOVIDO: this.notificationBaseUrl = this.configService.get<string>('BACKEND_URL')!;
 
-    // Validação de configuração
+    // ValidaÃ§Ã£o de configuraÃ§Ã£o
     if (!this.pagSeguroToken || !this.redirectBaseUrl) {
       this.logger.error(
-        'Credenciais e/ou URLs do PagSeguro não configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL no seu .env.',
+        'Credenciais e/ou URLs do PagSeguro nÃ£o configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL no seu .env.',
       );
       throw new InternalServerErrorException(
-        'Credenciais e/ou URLs do PagSeguro não configuradas.',
+        'Credenciais e/ou URLs do PagSeguro nÃ£o configuradas.',
       );
     }
   }
@@ -207,18 +214,18 @@ export class PagSeguroService {
     try {
       const response = await axios.post(sessionUrl);
       this.logger.log(
-        `[PagSeguroService] Sessão PagSeguro criada: ${JSON.stringify(response.data)}`,
+        `[PagSeguroService] SessÃ£o PagSeguro criada: ${JSON.stringify(response.data)}`,
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Erro ao criar sessão no PagSeguro:', error.message);
+      this.logger.error('Erro ao criar sessÃ£o no PagSeguro:', this.getErrorMessage(error));
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
-          `[PagSeguroService] Dados do erro da API PagSeguro (sessão): ${JSON.stringify(error.response.data)}`,
+          `[PagSeguroService] Dados do erro da API PagSeguro (sessÃ£o): ${JSON.stringify(error.response.data)}`,
         );
       }
       throw new InternalServerErrorException(
-        'Falha ao criar sessão no PagSeguro.',
+        'Falha ao criar sessÃ£o no PagSeguro.',
       );
     }
   }
@@ -243,14 +250,14 @@ export class PagSeguroService {
         response.data?.public_key ?? response.data?.publicKey ?? '';
       if (!publicKey) {
         throw new InternalServerErrorException(
-          'Resposta invÃ¡lida do PagSeguro: public key ausente.',
+          'Resposta invÃƒÂ¡lida do PagSeguro: public key ausente.',
         );
       }
 
       return publicKey;
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao gerar public key do PagSeguro: ${error.message}`,
+        `[PagSeguroService] Erro ao gerar public key do PagSeguro: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
@@ -263,13 +270,13 @@ export class PagSeguroService {
     }
   }
 
-  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parÃ¢metro
   async createPagSeguroPixCharge(
     details: CreatePagSeguroPixChargeDetails,
     notificationBaseUrl: string,
   ): Promise<PixGatewayResponse> {
     this.logger.log(
-      `[PagSeguroService] Criando cobrança PIX para o pedido ${details.orderId}`,
+      `[PagSeguroService] Criando cobranÃ§a PIX para o pedido ${details.orderId}`,
     );
 
     const cleanedPhone = details.customer.phone
@@ -295,7 +302,7 @@ export class PagSeguroService {
           customerPhoneNumber.length === 9 ? 'MOBILE' : 'HOME';
       } else {
         this.logger.warn(
-          `[PagSeguroService] Telefone do cliente (${details.customer.phone}) é inválido. Usando fallback.`,
+          `[PagSeguroService] Telefone do cliente (${details.customer.phone}) Ã© invÃ¡lido. Usando fallback.`,
         );
         customerPhoneArea = '11';
         customerPhoneNumber = '999999999';
@@ -340,7 +347,7 @@ export class PagSeguroService {
           expiration_date: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         },
       ],
-      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      // MODIFICADO: Agora usa o parÃ¢metro 'notificationBaseUrl'
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
@@ -349,7 +356,7 @@ export class PagSeguroService {
     );
 
     this.logger.debug(
-      `[PagSeguroService] Enviando cobrança PIX para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
+      `[PagSeguroService] Enviando cobranÃ§a PIX para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
     );
 
     try {
@@ -366,7 +373,7 @@ export class PagSeguroService {
       );
 
       this.logger.log(
-        `[PagSeguroService] Cobrança PIX criada com sucesso para o pedido ${details.orderId}.`,
+        `[PagSeguroService] CobranÃ§a PIX criada com sucesso para o pedido ${details.orderId}.`,
       );
       this.logger.warn(
         `[PagSeguroService][HOMOLOG] response=${JSON.stringify(response.data)}`,
@@ -376,7 +383,7 @@ export class PagSeguroService {
 
       if (!qrCodeResponse) {
         throw new InternalServerErrorException(
-          'Resposta inválida do PagSeguro: QR Code não encontrado na resposta do pedido.',
+          'Resposta invÃ¡lida do PagSeguro: QR Code nÃ£o encontrado na resposta do pedido.',
         );
       }
 
@@ -386,7 +393,8 @@ export class PagSeguroService {
         status: 'PENDING',
         brCode: qrCodeResponse.text,
         qrCodeImage: qrCodeResponse.links?.find(
-          (link: any) => link.rel === 'QR_CODE_IMAGE',
+          (link: any) =>
+            link.rel === 'QR_CODE_IMAGE' || link.rel === 'QRCODE.PNG',
         )?.href,
         expiresAt: qrCodeResponse.expiration_date,
         amount: details.amount.toNumber(),
@@ -395,7 +403,7 @@ export class PagSeguroService {
       };
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao criar cobrança PIX para o pedido ${details.orderId}: ${error.message}`,
+        `[PagSeguroService] Erro ao criar cobranÃ§a PIX para o pedido ${details.orderId}: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
@@ -410,18 +418,18 @@ export class PagSeguroService {
         );
       }
       throw new InternalServerErrorException(
-        'Falha ao criar cobrança PIX com PagSeguro.',
+        'Falha ao criar cobranÃ§a PIX com PagSeguro.',
       );
     }
   }
 
-  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parÃ¢metro
   async processDirectCreditCardPayment(
     details: CreatePagSeguroCreditCardChargeDetails,
     notificationBaseUrl: string,
   ): Promise<CardGatewayResponse> {
     this.logger.log(
-      `[PagSeguroService] Processando pagamento com cartão para o pedido ${details.orderId}`,
+      `[PagSeguroService] Processando pagamento com cartÃ£o para o pedido ${details.orderId}`,
     );
 
     const cleanedPhone = details.customer.phone
@@ -437,7 +445,7 @@ export class PagSeguroService {
       customerPhoneType = customerPhoneNumber.length === 9 ? 'MOBILE' : 'HOME';
     } else {
       this.logger.warn(
-        `[PagSeguroService] Telefone do cliente (${details.customer.phone}) é inválido. Usando fallback.`,
+        `[PagSeguroService] Telefone do cliente (${details.customer.phone}) Ã© invÃ¡lido. Usando fallback.`,
       );
       customerPhoneArea = '11';
       customerPhoneNumber = '999999999';
@@ -460,29 +468,29 @@ export class PagSeguroService {
     const stateUfMap: { [key: string]: string } = {
       Acre: 'AC',
       Alagoas: 'AL',
-      Amapá: 'AP',
+      AmapÃ¡: 'AP',
       Amazonas: 'AM',
       Bahia: 'BA',
-      Ceará: 'CE',
+      CearÃ¡: 'CE',
       'Distrito Federal': 'DF',
-      'Espírito Santo': 'ES',
-      Goiás: 'GO',
-      Maranhão: 'MA',
+      'EspÃ­rito Santo': 'ES',
+      GoiÃ¡s: 'GO',
+      MaranhÃ£o: 'MA',
       'Mato Grosso': 'MT',
       'Mato Grosso do Sul': 'MS',
       'Minas Gerais': 'MG',
-      Pará: 'PA',
-      Paraíba: 'PB',
-      Paraná: 'PR',
+      ParÃ¡: 'PA',
+      ParaÃ­ba: 'PB',
+      ParanÃ¡: 'PR',
       Pernambuco: 'PE',
-      Piauí: 'PI',
+      PiauÃ­: 'PI',
       'Rio de Janeiro': 'RJ',
       'Rio Grande do Norte': 'RN',
       'Rio Grande do Sul': 'RS',
-      Rondônia: 'RO',
+      RondÃ´nia: 'RO',
       Roraima: 'RR',
       'Santa Catarina': 'SC',
-      'São Paulo': 'SP',
+      'SÃ£o Paulo': 'SP',
       Sergipe: 'SE',
       Tocantins: 'TO',
     };
@@ -540,7 +548,7 @@ export class PagSeguroService {
           },
         },
       ],
-      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      // MODIFICADO: Agora usa o parÃ¢metro 'notificationBaseUrl'
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
@@ -549,7 +557,7 @@ export class PagSeguroService {
     );
 
     this.logger.debug(
-      `[PagSeguroService] Enviando pagamento com cartão para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
+      `[PagSeguroService] Enviando pagamento com cartÃ£o para PagSeguro (${this.pagSeguroBaseApiUrl}/orders) para o pedido ${details.orderId}.`,
     );
 
     try {
@@ -566,7 +574,7 @@ export class PagSeguroService {
       );
 
       this.logger.log(
-        `[PagSeguroService] Pagamento com cartão processado com sucesso para o pedido ${details.orderId}.`,
+        `[PagSeguroService] Pagamento com cartÃ£o processado com sucesso para o pedido ${details.orderId}.`,
       );
       this.logger.warn(
         `[PagSeguroService][HOMOLOG] response=${JSON.stringify(response.data)}`,
@@ -575,7 +583,7 @@ export class PagSeguroService {
       const charge = response.data.charges?.[0];
       if (!charge) {
         throw new InternalServerErrorException(
-          'Resposta inválida do PagSeguro: charge não encontrada.',
+          'Resposta invÃ¡lida do PagSeguro: charge nÃ£o encontrada.',
         );
       }
 
@@ -589,7 +597,7 @@ export class PagSeguroService {
       };
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao processar pagamento com cartão para o pedido ${details.orderId}: ${error.message}`,
+        `[PagSeguroService] Erro ao processar pagamento com cartÃ£o para o pedido ${details.orderId}: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
@@ -604,12 +612,12 @@ export class PagSeguroService {
         );
       }
       throw new InternalServerErrorException(
-        'Falha ao processar pagamento direto com cartão de crédito via PagSeguro.',
+        'Falha ao processar pagamento direto com cartÃ£o de crÃ©dito via PagSeguro.',
       );
     }
   }
 
-  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parÃ¢metro
   async createPagSeguroCheckoutRedirect(
     details: CreatePagSeguroCheckoutRedirectDetails,
     notificationBaseUrl: string,
@@ -645,7 +653,7 @@ export class PagSeguroService {
           customerPhoneNumber.length === 9 ? 'MOBILE' : 'HOME';
       } else {
         this.logger.warn(
-          `[PagSeguroService] Telefone do cliente (${details.customer.phone}) é inválido. Usando fallback.`,
+          `[PagSeguroService] Telefone do cliente (${details.customer.phone}) Ã© invÃ¡lido. Usando fallback.`,
         );
         customerPhoneArea = '11';
         customerPhoneNumber = '999999999';
@@ -663,29 +671,29 @@ export class PagSeguroService {
     const stateUfMap: { [key: string]: string } = {
       Acre: 'AC',
       Alagoas: 'AL',
-      Amapá: 'AP',
+      AmapÃ¡: 'AP',
       Amazonas: 'AM',
       Bahia: 'BA',
-      Ceará: 'CE',
+      CearÃ¡: 'CE',
       'Distrito Federal': 'DF',
-      'Espírito Santo': 'ES',
-      Goiás: 'GO',
-      Maranhão: 'MA',
+      'EspÃ­rito Santo': 'ES',
+      GoiÃ¡s: 'GO',
+      MaranhÃ£o: 'MA',
       'Mato Grosso': 'MT',
       'Mato Grosso do Sul': 'MS',
       'Minas Gerais': 'MG',
-      Pará: 'PA',
-      Paraíba: 'PB',
-      Paraná: 'PR',
+      ParÃ¡: 'PA',
+      ParaÃ­ba: 'PB',
+      ParanÃ¡: 'PR',
       Pernambuco: 'PE',
-      Piauí: 'PI',
+      PiauÃ­: 'PI',
       'Rio de Janeiro': 'RJ',
       'Rio Grande do Norte': 'RN',
       'Rio Grande do Sul': 'RS',
-      Rondônia: 'RO',
+      RondÃ´nia: 'RO',
       Roraima: 'RR',
       'Santa Catarina': 'SC',
-      'São Paulo': 'SP',
+      'SÃ£o Paulo': 'SP',
       Sergipe: 'SE',
       Tocantins: 'TO',
     };
@@ -694,7 +702,7 @@ export class PagSeguroService {
       details.shippingAddress.state.toUpperCase();
     if (regionCode.length !== 2) {
       this.logger.warn(
-        `[PagSeguroService] Código de região inválido para o estado: ${details.shippingAddress.state}. Enviado: ${regionCode}`,
+        `[PagSeguroService] CÃ³digo de regiÃ£o invÃ¡lido para o estado: ${details.shippingAddress.state}. Enviado: ${regionCode}`,
       );
     }
 
@@ -747,7 +755,7 @@ export class PagSeguroService {
         address_modifiable: false,
       },
       redirect_url: `${this.redirectBaseUrl}/order-success?orderId=${details.orderId}`,
-      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      // MODIFICADO: Agora usa o parÃ¢metro 'notificationBaseUrl'
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
       description: details.description,
       customer_modifiable: false,
@@ -789,7 +797,7 @@ export class PagSeguroService {
 
       if (!payLink || !payLink.href) {
         this.logger.error(
-          `[PagSeguroService] Resposta inválida do PagSeguro (link PAY ausente): ${JSON.stringify(response.data)}`,
+          `[PagSeguroService] Resposta invÃ¡lida do PagSeguro (link PAY ausente): ${JSON.stringify(response.data)}`,
         );
         throw new InternalServerErrorException(
           'Falha ao obter link de pagamento do PagSeguro. Resposta incompleta.',
@@ -802,7 +810,7 @@ export class PagSeguroService {
       };
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao criar checkout de redirecionamento para order ${details.orderId}: ${error.message}`,
+        `[PagSeguroService] Erro ao criar checkout de redirecionamento para order ${details.orderId}: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
@@ -843,7 +851,9 @@ export class PagSeguroService {
     } catch (error) {
       this.logger.error(
         `[PagSeguroService] Erro ao buscar detalhes do checkout PagSeguro ${pagSeguroCheckoutId}:`,
-        error.response?.data || error.message,
+        axios.isAxiosError(error)
+          ? error.response?.data || this.getErrorMessage(error)
+          : this.getErrorMessage(error),
       );
       if (
         axios.isAxiosError(error) &&
@@ -851,7 +861,7 @@ export class PagSeguroService {
         error.response.status === 404
       ) {
         throw new NotFoundException(
-          `Checkout PagSeguro com ID "${pagSeguroCheckoutId}" não encontrado.`,
+          `Checkout PagSeguro com ID "${pagSeguroCheckoutId}" nÃ£o encontrado.`,
         );
       }
       throw new InternalServerErrorException(
@@ -881,7 +891,9 @@ export class PagSeguroService {
     } catch (error) {
       this.logger.error(
         `[PagSeguroService] Erro ao buscar detalhes do pedido PagSeguro ${orderId}:`,
-        error.response?.data || error.message,
+        axios.isAxiosError(error)
+          ? error.response?.data || this.getErrorMessage(error)
+          : this.getErrorMessage(error),
       );
       if (
         axios.isAxiosError(error) &&
@@ -889,7 +901,7 @@ export class PagSeguroService {
         error.response.status === 404
       ) {
         throw new NotFoundException(
-          `Pedido PagSeguro com ID "${orderId}" não encontrado.`,
+          `Pedido PagSeguro com ID "${orderId}" nÃ£o encontrado.`,
         );
       }
       throw new InternalServerErrorException(
@@ -898,10 +910,10 @@ export class PagSeguroService {
     }
   }
 
-  // NOVO: Método para iniciar um reembolso
+  // NOVO: MÃ©todo para iniciar um reembolso
   async initiateRefund(transactionId: string, amount?: number): Promise<any> {
     this.logger.log(
-      `[PagSeguroService] Iniciando reembolso para a transação ${transactionId}, valor: ${amount || 'total'}`,
+      `[PagSeguroService] Iniciando reembolso para a transaÃ§Ã£o ${transactionId}, valor: ${amount || 'total'}`,
     );
 
     const refundUrl = `${this.pagSeguroBaseApiUrl}/charges/${transactionId}/cancel`;
@@ -920,12 +932,12 @@ export class PagSeguroService {
         },
       });
       this.logger.log(
-        `[PagSeguroService] Reembolso iniciado com sucesso para transação ${transactionId}.`,
+        `[PagSeguroService] Reembolso iniciado com sucesso para transaÃ§Ã£o ${transactionId}.`,
       );
       return response.data;
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao iniciar reembolso para transação ${transactionId}: ${error.message}`,
+        `[PagSeguroService] Erro ao iniciar reembolso para transaÃ§Ã£o ${transactionId}: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
@@ -945,3 +957,4 @@ export class PagSeguroService {
     }
   }
 }
+
