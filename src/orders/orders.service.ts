@@ -407,4 +407,47 @@ export class OrdersService {
     }
     return order;
   }
+
+  async findOneByGuestEmail(email: string, orderIdentifier: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedOrderIdentifier = orderIdentifier
+      .trim()
+      .replace(/^#/, '')
+      .toLowerCase();
+
+    if (!normalizedEmail || !normalizedOrderIdentifier) {
+      throw new BadRequestException(
+        'Email e numero do pedido sao obrigatorios para rastrear a compra.',
+      );
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        guestEmail: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+        OR: [
+          { id: normalizedOrderIdentifier },
+          {
+            id: {
+              endsWith: normalizedOrderIdentifier,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      include: {
+        items: { include: { product: true } },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        `Pedido com identificador "${orderIdentifier}" nao encontrado para o email informado.`,
+      );
+    }
+
+    return order;
+  }
 }
