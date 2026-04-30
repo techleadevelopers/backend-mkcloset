@@ -31,6 +31,12 @@ type OrderWithRelations = Order & {
   }[];
 };
 
+type PixPaymentSnapshot = {
+  qrCodeText?: string | null;
+  qrCodeUrl?: string | null;
+  transactionRef?: string | null;
+};
+
 interface OrderItemData {
   productId: string;
   quantity: number;
@@ -49,6 +55,42 @@ export class OrdersService {
     private notificationsService: NotificationsService, // NOVO: Injete o serviço de notificações
     private shippingService: ShippingService,
   ) {}
+
+  private async attachPixData<T extends { id: string; paymentMethod?: string }>(
+    order: T,
+  ): Promise<T & { qrCodeImage?: string | null; brCode?: string | null }> {
+    if (!order || order.paymentMethod !== 'PIX') {
+      return order as T & { qrCodeImage?: string | null; brCode?: string | null };
+    }
+
+    const [intent] = await this.prisma.$queryRaw<PixPaymentSnapshot[]>(
+      Prisma.sql`
+        SELECT "qrCodeText", "qrCodeUrl", "transactionRef"
+        FROM "PaymentIntent"
+        WHERE "orderId" = ${order.id}
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      `,
+    );
+
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { orderId: order.id },
+      select: {
+        qrCodeUrl: true,
+        transactionRef: true,
+      },
+    });
+
+    return {
+      ...order,
+      qrCodeImage: intent?.qrCodeUrl ?? transaction?.qrCodeUrl ?? null,
+      brCode:
+        intent?.qrCodeText ??
+        intent?.transactionRef ??
+        transaction?.transactionRef ??
+        null,
+    };
+  }
 
   private buildShippingItemsFromCart(
     cartItems: Array<{
@@ -132,7 +174,7 @@ export class OrdersService {
       throw new NotFoundException(`Pedido com ID "${orderId}" não encontrado.`);
     }
 
-    return order as OrderWithRelations; // Garante o tipo de retorno
+    return this.attachPixData(order as OrderWithRelations) as Promise<OrderWithRelations>; // Garante o tipo de retorno
   }
 
   async create(createOrderDto: CreateOrderDto, userId?: string) {
@@ -366,7 +408,7 @@ export class OrdersService {
       // Não relança o erro para não impedir a criação do pedido
     }
 
-    return order;
+    return this.attachPixData(order);
   }
 
   async findAllByUserId(userId: string) {
@@ -390,7 +432,7 @@ export class OrdersService {
         `Pedido com ID "${orderId}" não encontrado ou não pertence ao usuário.`,
       );
     }
-    return order;
+    return this.attachPixData(order);
   }
 
   async findOneByGuestId(guestId: string, orderId: string) {
@@ -405,7 +447,7 @@ export class OrdersService {
         `Pedido com ID "${orderId}" não encontrado ou não pertence ao convidado.`,
       );
     }
-    return order;
+    return this.attachPixData(order);
   }
 
   async findOneByGuestEmail(email: string, orderIdentifier: string) {
