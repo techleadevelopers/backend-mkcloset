@@ -494,13 +494,28 @@ export class PaymentsService {
   }
 
   private requireBackendUrl(): string {
-    const backendUrl = this.configService.backendUrl;
+    const backendUrl = this.configService.backendUrl?.trim();
     if (!backendUrl) {
       throw new InternalServerErrorException(
         'A variável de ambiente BACKEND_URL não está definida.',
       );
     }
-    return backendUrl;
+
+    try {
+      const parsedUrl = new URL(backendUrl);
+      const apiPath = parsedUrl.pathname.includes('/api')
+        ? parsedUrl.pathname.slice(
+            0,
+            parsedUrl.pathname.indexOf('/api') + '/api'.length,
+          )
+        : '/api';
+
+      return `${parsedUrl.origin}${apiPath}`.replace(/\/+$/, '');
+    } catch {
+      throw new InternalServerErrorException(
+        'A variável de ambiente BACKEND_URL é inválida.',
+      );
+    }
   }
 
   private async runAntifraud(
