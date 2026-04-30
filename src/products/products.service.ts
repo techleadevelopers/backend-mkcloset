@@ -8,16 +8,16 @@ import { Prisma } from '@prisma/client';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Função centralizada para não repetir lógica de tratamento em cada método
+  // FunÃ§Ã£o centralizada para nÃ£o repetir lÃ³gica de tratamento em cada mÃ©todo
   private formatProduct(product: any): ProductEntity {
-    // Se no banco a imagem já for completa (Cloudinary/HTTP), enviamos ela pura.
-    // Se for um path relativo que você quer manter, o banco já deve trazer o path certo.
+    // Se no banco a imagem jÃ¡ for completa (Cloudinary/HTTP), enviamos ela pura.
+    // Se for um path relativo que vocÃª quer manter, o banco jÃ¡ deve trazer o path certo.
     // Removemos aquele if/else de 'julia', 'glamour', etc.
     return new ProductEntity(product);
   }
 
   async create(createProductDto: any): Promise<ProductEntity> {
-    throw new Error('Método create ainda não implementado.');
+    throw new Error('MÃ©todo create ainda nÃ£o implementado.');
   }
 
   async findAll(query: ProductQueryDto): Promise<ProductEntity[]> {
@@ -106,7 +106,7 @@ export class ProductsService {
     });
 
     if (!product) {
-      throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
+      throw new NotFoundException(`Produto com ID "${id}" nÃ£o encontrado.`);
     }
 
     return this.formatProduct(product);
@@ -123,7 +123,7 @@ export class ProductsService {
     if (updateProductDto?.price !== undefined) {
       const price = Number(updateProductDto.price);
       if (!Number.isFinite(price)) {
-        throw new Error('Preço inválido.');
+        throw new Error('PreÃ§o invÃ¡lido.');
       }
       data.price = price;
     }
@@ -144,7 +144,7 @@ export class ProductsService {
       });
       return new ProductEntity(removedProduct);
     } catch (error) {
-      throw new NotFoundException(`Produto com ID "${id}" não encontrado.`);
+      throw new NotFoundException(`Produto com ID "${id}" nÃ£o encontrado.`);
     }
   }
 }
