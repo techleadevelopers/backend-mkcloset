@@ -1,4 +1,3 @@
-// src/orders/orders.controller.ts
 import {
   Controller,
   Post,
@@ -8,7 +7,7 @@ import {
   Get,
   Query,
   BadRequestException,
-} from '@nestjs/common'; // NOVO: Adicionado Query e BadRequestException
+} from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
@@ -18,8 +17,6 @@ import type { User } from '@prisma/client';
 import { ConfigService } from 'src/config/config.service';
 import { createHmac } from 'crypto';
 
-// Aplica o OptionalJwtAuthGuard na classe para que todos os métodos o usem
-// Ou aplique individualmente se houver métodos que SÓ podem ser acessados por logados
 @UseGuards(OptionalJwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
@@ -30,18 +27,17 @@ export class OrdersController {
 
   private verifyGuest(guestId?: string, signature?: string) {
     if (!guestId) {
-      throw new BadRequestException('guestId é obrigatório para convidados.');
+      throw new BadRequestException('guestId e obrigatorio para convidados.');
     }
     const expected = createHmac('sha256', this.configService.guestSigningSecret)
       .update(guestId)
       .digest('hex');
     if (expected !== signature) {
-      throw new BadRequestException('Assinatura de guestId inválida.');
+      throw new BadRequestException('Assinatura de guestId invalida.');
     }
   }
 
   @Post()
-  // MUDANÇA AQUI: createOrderDto vem primeiro, user? vem depois
   async create(
     @Body() createOrderDto: CreateOrderDto,
     @CurrentUser() user?: User,
@@ -49,19 +45,13 @@ export class OrdersController {
     if (!user) {
       this.verifyGuest(
         createOrderDto.guestId,
-        (createOrderDto as any)?.signature || (createOrderDto as any)?.['x-guest-signature'],
+        (createOrderDto as any)?.signature ||
+          (createOrderDto as any)?.['x-guest-signature'],
       );
     }
-    // MUDANÇA AQUI: A ordem dos argumentos na chamada ao service foi ajustada
     return this.ordersService.create(createOrderDto, user?.id);
   }
 
-  // Rotas que exigem autenticação ainda podem usar JwtAuthGuard explicitamente
-  // ou confiar no OptionalJwtAuthGuard e verificar 'user' dentro do método.
-  // Para findAll e findOne, provavelmente você ainda quer que seja para o usuário logado.
-  // Se sim, você pode adicionar @UseGuards(JwtAuthGuard) a esses métodos ou
-  // remover o OptionalJwtAuthGuard da classe e aplicar individualmente.
-  // Mantendo JwtAuthGuard para garantir que essas rotas SÓ funcionem para logados.
   @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(@CurrentUser() user: User) {
@@ -74,19 +64,22 @@ export class OrdersController {
     return this.ordersService.findOneByUserId(user.id, id);
   }
 
-  // NOVO ENDPOINT: Rastreamento de pedidos para convidados
-  // Pode ser acessado sem autenticação, mas exige o guestId (ou email) para validação
   @Get('track/:orderId')
   async trackGuestOrder(
     @Param('orderId') orderId: string,
-    @Query('guestId') guestId: string, // Ou @Query('email') email: string
+    @Query('guestId') guestId?: string,
+    @Query('email') email?: string,
   ) {
-    // É crucial que o guestId seja passado para validar se o convidado tem acesso ao pedido
-    if (!guestId) {
+    if (guestId) {
+      return this.ordersService.findOneByGuestId(guestId, orderId);
+    }
+
+    if (!email) {
       throw new BadRequestException(
-        'O ID do convidado (guestId) é obrigatório para rastrear o pedido.',
+        'Informe o guestId ou o e-mail usado no pedido para rastrear a compra.',
       );
     }
-    return this.ordersService.findOneByGuestId(guestId, orderId);
+
+    return this.ordersService.findOneByGuestEmail(email, orderId);
   }
 }
