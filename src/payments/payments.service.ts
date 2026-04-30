@@ -573,7 +573,7 @@ export class PaymentsService {
         SELECT *
         FROM "PaymentIntent"
         WHERE "orderId" = ${orderId}
-          AND "gateway" = ${gateway}
+          AND "gateway" = ${gateway}::"PaymentIntentGateway"
         ORDER BY "createdAt" DESC
         LIMIT 1
       `,
@@ -628,18 +628,18 @@ export class PaymentsService {
           "metadata"
         )
         VALUES (
-          ${crypto.randomUUID()},
-          ${order.userId ?? userId ?? null},
-          ${order.id},
-          ${gateway},
-          ${'PENDING'},
-          ${order.totalAmount},
-          ${'BRL'},
-          ${this.buildReferenceId(order.id, gateway)},
-          ${this.buildIdempotencyKey(order.id, gateway)},
-          ${description},
-          ${metadata === undefined ? null : JSON.stringify(metadata)}::jsonb
-        )
+  ${crypto.randomUUID()},
+  ${order.userId ?? userId ?? null},
+  ${order.id},
+  ${gateway}::"PaymentIntentGateway",
+  ${'PENDING'}::"PaymentIntentStatus",
+  ${order.totalAmount},
+  ${'BRL'},
+  ${this.buildReferenceId(order.id, gateway)},
+  ${this.buildIdempotencyKey(order.id, gateway)},
+  ${description},
+  ${metadata === undefined ? null : JSON.stringify(metadata)}::jsonb
+)
         RETURNING *
       `,
     );
@@ -647,55 +647,63 @@ export class PaymentsService {
     return intent;
   }
 
-  private async updatePaymentIntent(
-    intentId: string,
-    data: Partial<PaymentIntentRecord>,
-  ): Promise<PaymentIntentRecord> {
-    const [current] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
-      Prisma.sql`
-        SELECT *
-        FROM "PaymentIntent"
-        WHERE "id" = ${intentId}
-        LIMIT 1
-      `,
-    );
-    if (!current) {
-      throw new NotFoundException('Payment intent não encontrado.');
+ private async updatePaymentIntent(
+  intentId: string,
+  data: Partial<PaymentIntentRecord>,
+): Promise<PaymentIntentRecord> {
+  const [current] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
+    Prisma.sql`
+      SELECT *
+      FROM "PaymentIntent"
+      WHERE "id" = ${intentId}
+      LIMIT 1
+    `,
+  );
+  if (!current) {
+    throw new NotFoundException('Payment intent não encontrado.');
+  }
+
+  const nextStatus = data.status
+    ? this.applyTransition(current.status, data.status)
+    : current.status;
+
+  const updateEntries = Object.entries({
+    ...data,
+    status: nextStatus,
+  }).filter(([, value]) => value !== undefined);
+
+  const assignments = updateEntries.map(([key, value]) => {
+    if (key === 'metadata' || key === 'lastWebhookPayload') {
+      return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${
+        value === null ? null : JSON.stringify(value)
+      }::jsonb`;
+    }
+    
+    if (key === 'status') {
+      return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}::"PaymentIntentStatus"`;
     }
 
-    const nextStatus = data.status
-      ? this.applyTransition(current.status, data.status)
-      : current.status;
+    if (key === 'gateway') {
+      return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}::"PaymentIntentGateway"`;
+    }
+    
+    return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}`;
+  });
 
-    const updateEntries = Object.entries({
-      ...data,
-      status: nextStatus,
-    }).filter(([, value]) => value !== undefined);
+  const [updatedIntent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
+    Prisma.sql`
+      UPDATE "PaymentIntent"
+      SET ${Prisma.join(
+        [...assignments, Prisma.sql`"updatedAt" = CURRENT_TIMESTAMP`],
+        ', ',
+      )}
+      WHERE "id" = ${intentId}
+      RETURNING *
+    `,
+  );
 
-    const assignments = updateEntries.map(([key, value]) => {
-      if (key === 'metadata' || key === 'lastWebhookPayload') {
-        return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${
-          value === null ? null : JSON.stringify(value)
-        }::jsonb`;
-      }
-
-      return Prisma.sql`${Prisma.raw(`"${key}"`)} = ${value}`;
-    });
-
-    const [updatedIntent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
-      Prisma.sql`
-        UPDATE "PaymentIntent"
-        SET ${Prisma.join(
-          [...assignments, Prisma.sql`"updatedAt" = CURRENT_TIMESTAMP`],
-          ', ',
-        )}
-        WHERE "id" = ${intentId}
-        RETURNING *
-      `,
-    );
-
-    return updatedIntent;
-  }
+  return updatedIntent;
+}
 
   private applyTransition(
     current: PaymentIntentStatus,
