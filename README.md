@@ -1,98 +1,419 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MK Closet Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API monolítica em NestJS para e-commerce, responsável por catálogo, autenticação, carrinho, checkout, pedidos, pagamentos, frete, notificações e administração.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Stack
 
-## Description
+- Node.js 22
+- NestJS 11
+- Prisma 6
+- PostgreSQL
+- PagBank/PagSeguro (`orders`, `pix`, `checkout`, `public-keys`)
+- Nodemailer
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Responsabilidades
 
-## Project setup
+- autenticação JWT e login local
+- usuários e endereços
+- categorias e produtos
+- carrinho de usuário logado e visitante
+- wishlist
+- cálculo de frete
+- criação e rastreio de pedidos
+- pagamentos PIX, cartão e redirecionamento PagBank
+- webhooks de pagamento
+- e-mails transacionais
+- antifraude
+- rotas administrativas
 
-```bash
-$ npm install
+## Estrutura
+
+```text
+src/
+  admin/            painel administrativo e reembolsos
+  antifraud/        integração antifraude
+  auth/             login, JWT, guards, estratégias
+  cart/             carrinho logado e visitante
+  categories/       catálogo de categorias
+  common/           decorators, guards, interceptors
+  config/           facade tipada para env vars
+  inventory/        ajustes de estoque
+  notifications/    e-mails transacionais
+  orders/           criação e consulta de pedidos
+  payments/         intents, PIX, cartão, webhook, refunds
+  prisma/           acesso ao banco
+  products/         catálogo de produtos
+  shipping/         cálculo de frete
+  users/            usuários e endereços
+  wishlist/         favoritos
 ```
 
-## Compile and run the project
+## Arquitetura
 
-```bash
-# development
-$ npm run start
+- `AppModule` agrega os módulos de domínio e infraestrutura.
+- `PrismaService` centraliza acesso ao banco.
+- `ConfigService` em `src/config` encapsula as variáveis de ambiente usadas pelo projeto.
+- `main.ts` aplica:
+  - prefixo global `/api`
+  - `ValidationPipe` com `whitelist` e `forbidNonWhitelisted`
+  - CORS restrito por origem
+  - `rawBody` para validação de webhook
+  - Swagger opcional em `/api/docs`
+- o backend também serve o build do frontend quando a pasta `client/dist` existe.
 
-# watch mode
-$ npm run start:dev
+## Modelo de dados
 
-# production mode
-$ npm run start:prod
+Entidades principais no Prisma:
+
+- `User`
+- `Address`
+- `Category`
+- `Product`
+- `Cart`
+- `CartItem`
+- `Wishlist`
+- `WishlistItem`
+- `Order`
+- `OrderItem`
+- `Transaction`
+- `Coupon`
+- `PaymentIntent`
+- `InstagramIntegration`
+
+Enums principais:
+
+- `OrderStatus`
+- `TransactionType`
+- `PaymentGateway`
+- `PaymentIntentStatus`
+- `Role`
+
+### PaymentIntent
+
+`PaymentIntent` é a entidade central do fluxo de pagamento. Ela guarda o estado interno de uma tentativa de cobrança e evita duplicidade por pedido/gateway.
+
+Campos relevantes:
+
+- `gateway`
+- `status`
+- `externalOrderId`
+- `externalChargeId`
+- `transactionRef`
+- `qrCodeText`
+- `qrCodeUrl`
+- `expiresAt`
+- `lastWebhookPayload`
+
+## Fluxos principais
+
+## Autenticação
+
+- JWT com `passport-jwt`
+- login local com `passport-local`
+- guards para usuário autenticado, papel e autenticação opcional
+
+## Carrinho visitante
+
+- visitante usa `guestId`
+- integridade é reforçada com `x-guest-signature`
+- backend rejeita payloads com campos não permitidos
+
+## Checkout
+
+1. frontend cria pedido em `/api/orders`
+2. backend valida carrinho, recalcula frete e cria `Order`
+3. para PIX/cartão/redirecionamento, o módulo `payments` cria ou reutiliza `PaymentIntent`
+4. `Transaction` é sincronizada a partir do `PaymentIntent`
+5. webhook atualiza `PaymentIntent`, `Transaction` e `Order`
+
+## PIX
+
+Fluxo esperado:
+
+1. `POST /api/payments/pix-charge/:orderId`
+2. backend monta payload do PagBank
+3. `PagSeguroService` chama `POST /orders`
+4. resposta do PagBank alimenta:
+   - `PaymentIntent.qrCodeText`
+   - `PaymentIntent.qrCodeUrl`
+   - `PaymentIntent.externalOrderId`
+5. frontend renderiza QR Code e código copia-e-cola
+
+Detalhes importantes:
+
+- o backend aceita links do PagBank com `QR_CODE_IMAGE` e `QRCODE.PNG`
+- se o `PaymentIntent` já existir mas estiver incompleto, o serviço pode reconsultar `getOrderDetails()` para preencher QR
+- `orders.service` anexa `qrCodeImage` e `brCode` nas consultas de pedido para consumo do frontend
+
+## Cartão
+
+- frontend gera `public key` e tokeniza cartão
+- backend chama o fluxo de cobrança direta
+- antifraude roda antes do disparo para o gateway
+
+## Redirect checkout
+
+- backend gera checkout hospedado no PagBank
+- webhook atualiza status local
+
+## Variáveis de ambiente
+
+Obrigatórias ou praticamente obrigatórias para produção:
+
+```env
+DATABASE_URL=
+JWT_SECRET=
+JWT_EXPIRES_IN=1h
+
+BACKEND_URL=
+FRONTEND_URL=
+PORT=3001
+SWAGGER_ENABLED=false
+
+PAGSEGURO_API_URL=https://sandbox.api.pagseguro.com
+PAGSEGURO_API_TOKEN=
+PAGSEGURO_WEBHOOK_SECRET=
+
+GUEST_SIGNING_SECRET=
+
+EMAIL_SERVICE_HOST=
+EMAIL_SERVICE_PORT=587
+EMAIL_SERVICE_USER=
+EMAIL_SERVICE_PASS=
+EMAIL_SERVICE_FROM=
+
+ANTIFRAUD_API_URL=
+ANTIFRAUD_API_KEY=
 ```
 
-## Run tests
+Variáveis auxiliares ou opcionais conforme módulos habilitados:
 
-```bash
-# unit tests
-$ npm run test
+```env
+CORREIOS_API_URL=
+SHOP_SLUG=mkcloset
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+FACEBOOK_REDIRECT_URI=
 ```
 
-## Deployment
+## Ambientes PagBank
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Sandbox:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```env
+PAGSEGURO_API_URL=https://sandbox.api.pagseguro.com
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Produção:
 
-## Resources
+```env
+PAGSEGURO_API_URL=https://api.pagseguro.com
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Observações operacionais:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `public key` de produção não substitui `PAGSEGURO_API_TOKEN`
+- PIX em produção pode exigir whitelist/liberação do PagBank
+- QR de sandbox pode não ser pagável por app bancário real
+- a conta PagBank precisa de chave Pix cadastrada
 
-## Support
+## Instalação
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+npm install
+```
 
-## Stay in touch
+## Desenvolvimento
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+npm run start:dev
+```
 
-## License
+API local padrão:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```text
+http://localhost:3001/api
+```
+
+Swagger, se habilitado:
+
+```text
+http://localhost:3001/api/docs
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Produção
+
+```bash
+npm run start:prod
+```
+
+## Prisma
+
+Gerar client:
+
+```bash
+npx prisma generate
+```
+
+Aplicar migrations em desenvolvimento:
+
+```bash
+npx prisma migrate dev
+```
+
+Abrir studio:
+
+```bash
+npx prisma studio
+```
+
+Seed:
+
+```bash
+npx prisma db seed
+```
+
+## Docker
+
+O `Dockerfile`:
+
+- usa `node:22-alpine`
+- instala dependências completas
+- executa `prisma generate`
+- executa `npm run build`
+- inicia `dist/src/main.js`
+
+Build local:
+
+```bash
+docker build -t mkcloset-backend .
+```
+
+## Endpoints principais
+
+Autenticação:
+
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `GET /api/auth/profile`
+
+Usuários:
+
+- `GET /api/users/me`
+- `GET /api/users/me/addresses`
+
+Catálogo:
+
+- `GET /api/categories`
+- `GET /api/products`
+- `GET /api/products/featured`
+- `GET /api/products/:id`
+
+Carrinho:
+
+- `GET /api/cart`
+- `GET /api/cart/guest`
+- `POST /api/cart/items`
+- `PATCH /api/cart/items/:itemId`
+- `DELETE /api/cart/items/:itemId`
+
+Pedidos:
+
+- `POST /api/orders`
+- `GET /api/orders/:id`
+- `GET /api/orders/track/:orderId`
+
+Pagamentos:
+
+- `POST /api/payments/pix-charge/:orderId`
+- `POST /api/payments/process-card/:orderId`
+- `POST /api/payments/initiate-checkout/:orderId`
+- `POST /api/payments/webhook/pagseguro`
+- `GET /api/payments/card/public-key`
+
+Admin:
+
+- rotas protegidas em `/api/admin`
+
+## Segurança
+
+- JWT para usuário autenticado
+- assinatura HMAC para `guestId`
+- validação de payload com `class-validator`
+- webhook do PagBank validado com HMAC e `rawBody`
+- CORS com allowlist
+
+## Observabilidade
+
+O projeto usa `Logger` do Nest nos serviços críticos, especialmente:
+
+- pagamentos
+- antifraude
+- notificações
+- webhooks
+
+Pontos recomendados para acompanhar em produção:
+
+- falhas em `POST /payments/pix-charge/:orderId`
+- `ACCESS_DENIED` / whitelist no PagBank
+- inconsistência entre `PaymentIntent`, `Transaction` e `Order`
+- erros de CORS
+- falhas de SMTP
+
+## Troubleshooting
+
+## PIX gera 500
+
+Verificar:
+
+- `PAGSEGURO_API_URL`
+- `PAGSEGURO_API_TOKEN`
+- `PAGSEGURO_WEBHOOK_SECRET`
+- `BACKEND_URL`
+- existência da tabela `PaymentIntent`
+- enums `PaymentGateway` e `PaymentIntentStatus`
+
+## QR aparece vazio
+
+Verificar:
+
+- resposta de `POST /api/payments/pix-charge/:orderId`
+- se `qrCodeImage` e `brCode` vieram no JSON
+- se `PaymentIntent.qrCodeUrl` e `PaymentIntent.qrCodeText` foram persistidos
+- se `/api/orders/:id` ou `/api/orders/track/:id` retornam `qrCodeImage` e `brCode`
+
+## Produção responde `whitelist access required`
+
+Isso não é bug do código. Indica bloqueio do PagBank para a API de produção. Solicitar liberação da conta/whitelist ao suporte.
+
+## Build falha no CI
+
+Rodar localmente:
+
+```bash
+npm run build
+```
+
+Se falhar, corrigir primeiro TypeScript e Prisma antes de redeployar.
+
+## Convenções
+
+- rotas públicas e privadas compartilham o prefixo `/api`
+- convidado usa `guestId` e `x-guest-signature`
+- dados monetários usam `Decimal` no Prisma
+- `Order` é a fonte de verdade do pedido
+- `PaymentIntent` é a fonte de verdade do estado de pagamento
+- `Transaction` representa a visão financeira/auditável
+
+## Estado atual conhecido
+
+- o backend já suporta fluxo visitante e logado
+- o QR do PIX depende da resposta do PagBank e da persistência em `PaymentIntent`
+- em produção PagBank pode exigir whitelist adicional mesmo com token e public key válidos
