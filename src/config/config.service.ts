@@ -105,24 +105,52 @@ export class ConfigService {
 
   // --- Configurações do Provedor de E-mail ---
   get emailServiceHost(): string {
-    return this.nestConfigService.get<string>('EMAIL_SERVICE_HOST') || '';
+    return (
+      this.nestConfigService.get<string>('SMTP_HOST') ||
+      this.nestConfigService.get<string>('EMAIL_SERVICE_HOST') ||
+      ''
+    );
   }
 
   get emailServicePort(): number {
-    return this.nestConfigService.get<number>('EMAIL_SERVICE_PORT') || 587;
+    return (
+      this.nestConfigService.get<number>('SMTP_PORT') ||
+      this.nestConfigService.get<number>('EMAIL_SERVICE_PORT') ||
+      587
+    );
+  }
+
+  get emailServiceSecure(): boolean {
+    const raw =
+      this.nestConfigService.get<string>('SMTP_SECURE') ??
+      this.nestConfigService.get<string>('EMAIL_SERVICE_SECURE');
+    if (raw === undefined) {
+      return this.emailServicePort === 465;
+    }
+    return String(raw).toLowerCase() === 'true';
   }
 
   get emailServiceUser(): string {
-    return this.nestConfigService.get<string>('EMAIL_SERVICE_USER') || '';
+    return (
+      this.nestConfigService.get<string>('SMTP_USER') ||
+      this.nestConfigService.get<string>('EMAIL_SERVICE_USER') ||
+      ''
+    );
   }
 
   get emailServicePass(): string {
-    return this.nestConfigService.get<string>('EMAIL_SERVICE_PASS') || '';
+    return (
+      this.nestConfigService.get<string>('SMTP_PASS') ||
+      this.nestConfigService.get<string>('EMAIL_SERVICE_PASS') ||
+      ''
+    );
   }
 
   get emailServiceFrom(): string {
     return (
+      this.nestConfigService.get<string>('SMTP_FROM') ||
       this.nestConfigService.get<string>('EMAIL_SERVICE_FROM') ||
+      this.emailServiceUser ||
       'no-reply@yourdomain.com'
     );
   }
@@ -148,6 +176,35 @@ export class ConfigService {
     return this.nestConfigService.get<string>('ANTIFRAUD_API_KEY') || '';
   }
   // -----------------------------------
+
+  get cloudinaryApiKey(): string {
+    const value = this.nestConfigService.get<string>('CLOUDINARY_API_KEY');
+    if (!value) {
+      throw new InternalServerErrorException('CLOUDINARY_API_KEY não está configurado.');
+    }
+    return value;
+  }
+
+  get cloudinaryApiSecret(): string {
+    const value = this.nestConfigService.get<string>('CLOUDINARY_API_SECRET');
+    if (!value) {
+      throw new InternalServerErrorException('CLOUDINARY_API_SECRET não está configurado.');
+    }
+    return value;
+  }
+
+  get cloudinaryCloudName(): string {
+    const explicit = this.nestConfigService.get<string>('CLOUDINARY_CLOUD_NAME');
+    if (explicit) return explicit;
+
+    const cloudinaryUrl = this.nestConfigService.get<string>('CLOUDINARY_URL');
+    if (cloudinaryUrl) {
+      const match = cloudinaryUrl.match(/@([^/?#]+)$/);
+      if (match?.[1]) return match[1];
+    }
+
+    throw new InternalServerErrorException('CLOUDINARY_CLOUD_NAME não está configurado.');
+  }
 }
 
 

@@ -1,17 +1,12 @@
-// src/admin/admin.service.ts
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
-import { RefundsService } from 'src/payments/refunds.service';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { OrderStatus, Prisma } from '@prisma/client';
 import {
   AntifraudService,
   AntifraudStatus,
 } from 'src/antifraud/antifraud.service';
-import { OrdersService } from 'src/orders/orders.service';
-import { PrismaService } from 'src/prisma/prisma.service'; // Para operações diretas no DB se necessário, ou para tipagem
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { RefundsService } from 'src/payments/refunds.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class AdminService {
@@ -20,35 +15,22 @@ export class AdminService {
   constructor(
     private readonly refundsService: RefundsService,
     private readonly antifraudService: AntifraudService,
-    private readonly ordersService: OrdersService,
-    private readonly prisma: PrismaService, // Injetado para operações de DB, se o AdminService tiver lógica própria
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  /**
-   * Inicia um processo de reembolso para uma transação.
-   * @param transactionId O ID da transação a ser reembolsada.
-   * @param amount Opcional. O valor a ser reembolsado (para reembolso parcial).
-   * @returns Detalhes da resposta do reembolso.
-   */
-  async processRefund(transactionId: string, amount?: number): Promise<any> {
+  async processRefund(transactionId: string, amount?: number) {
     this.logger.log(
       `[AdminService] Solicitando reembolso para transação ${transactionId}.`,
     );
     return this.refundsService.initiateRefund(transactionId, amount);
   }
 
-  /**
-   * Atualiza manualmente o status da análise antifraude para uma transação.
-   * @param transactionId O ID da transação.
-   * @param newStatus O novo status antifraude.
-   * @param reason Opcional. O motivo da alteração.
-   * @returns A transação atualizada com o novo status antifraude.
-   */
   async updateTransactionAntifraudStatus(
     transactionId: string,
     newStatus: AntifraudStatus,
     reason?: string,
-  ): Promise<any> {
+  ) {
     this.logger.log(
       `[AdminService] Atualizando status antifraude da transação ${transactionId} para ${newStatus}.`,
     );
@@ -59,24 +41,9 @@ export class AdminService {
     );
   }
 
-  /**
-   * Busca todos os pedidos do sistema.
-   * Idealmente, deveria incluir paginação e filtros.
-   * @returns Uma lista de todos os pedidos.
-   */
-  async getAllOrdersForAdmin(): Promise<any[]> {
-    this.logger.log(
-      '[AdminService] Buscando todos os pedidos para o painel administrativo.',
-    );
-    // No ordersService, o findAllByUserId espera um userId.
-    // Você precisará de um método findAll() no OrdersService que não dependa de userId,
-    // ou ajustar este para usar um método de busca mais genérico.
-    // Por enquanto, vou chamar um método hipotético `findAllOrders` que você precisaria implementar.
-    // Ou, se `findAllByUserId` pode receber `undefined` para "todos", mantenha como está.
-    // Para este exemplo, vamos assumir que ordersService.findAllOrders() existe ou adaptar.
-    // Se ordersService.findAllByUserId(undefined) retorna todos os pedidos, mantenha.
-    // Caso contrário, você precisaria criar um método findAllOrders no OrdersService.
-    const allOrders = await this.prisma.order.findMany({
+  async getAllOrdersForAdmin() {
+    this.logger.log('[AdminService] Buscando pedidos do painel administrativo.');
+    return this.prisma.order.findMany({
       select: {
         id: true,
         userId: true,
@@ -89,6 +56,7 @@ export class AdminService {
         shippingPrice: true,
         shippingService: true,
         paymentMethod: true,
+        paymentDetails: true,
         createdAt: true,
         updatedAt: true,
         items: {
@@ -113,13 +81,130 @@ export class AdminService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return allOrders;
   }
 
-  /**
-   * Retorna logs de pagamento e transações sem expor tokens sensíveis.
-   * Limitado a leitura para ADMIN e CLIENT_VIEW.
-   */
+  async updateOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    options?: {
+      carrier?: string | null;
+      postedAt?: string | null;
+      trackingCode?: string | null;
+      trackingUrl?: string | null;
+      notifyStage?: 'PROCESSING' | null;
+    },
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Pedido com ID "${orderId}" não encontrado.`);
+    }
+
+    const paymentDetails =
+      order.paymentDetails &&
+      typeof order.paymentDetails === 'object' &&
+      !Array.isArray(order.paymentDetails)
+        ? { ...(order.paymentDetails as Record<string, unknown>) }
+        : {};
+
+    if (options?.trackingCode) {
+      paymentDetails.trackingCode = options.trackingCode;
+    }
+    if (options?.carrier) {
+      paymentDetails.carrier = options.carrier;
+    }
+    if (options?.postedAt) {
+      paymentDetails.postedAt = options.postedAt;
+    }
+    if (options?.trackingUrl) {
+      paymentDetails.trackingUrl = options.trackingUrl;
+    } else if (
+      options?.trackingCode &&
+      options?.carrier &&
+      options.carrier.trim().toLowerCase() === 'correios'
+    ) {
+      paymentDetails.trackingUrl = `https://rastreamento.correios.com.br/app/index.php?objeto=${encodeURIComponent(options.trackingCode)}`;
+    }
+    if (options?.notifyStage === 'PROCESSING') {
+      paymentDetails.processingNotifiedAt = new Date().toISOString();
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status,
+        paymentDetails: paymentDetails as unknown as Prisma.InputJsonValue,
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                images: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    const recipientEmail = updatedOrder.user?.email || updatedOrder.guestEmail;
+    const customerName = updatedOrder.user?.name || updatedOrder.guestName;
+
+    if (recipientEmail) {
+      if (options?.notifyStage === 'PROCESSING') {
+        await this.notificationsService.sendOrderProcessingEmail(recipientEmail, {
+          orderId: updatedOrder.id,
+          customerName,
+        });
+      } else if (status === OrderStatus.PAID) {
+        await this.notificationsService.sendPaymentConfirmationEmail(
+          recipientEmail,
+          updatedOrder.id,
+          Number(updatedOrder.totalAmount || 0),
+          customerName,
+        );
+      } else if (status === OrderStatus.SHIPPED) {
+        await this.notificationsService.sendOrderShippedEmail(recipientEmail, {
+          orderId: updatedOrder.id,
+          customerName,
+          carrier: (paymentDetails.carrier as string | undefined) || null,
+          postedAt: (paymentDetails.postedAt as string | undefined) || null,
+          trackingCode: (paymentDetails.trackingCode as string | undefined) || null,
+          trackingUrl: (paymentDetails.trackingUrl as string | undefined) || null,
+        });
+      } else if (status === OrderStatus.DELIVERED) {
+        await this.notificationsService.sendOrderDeliveredEmail(recipientEmail, {
+          orderId: updatedOrder.id,
+          customerName,
+        });
+      }
+    }
+
+    return updatedOrder;
+  }
+
   async getTransactionLogs(limit = 100) {
     const transactions = await this.prisma.transaction.findMany({
       take: limit,
@@ -162,6 +247,74 @@ export class AdminService {
     }));
   }
 
-  // Você pode adicionar mais métodos aqui para outras funcionalidades administrativas
-  // como gerenciar usuários, produtos, categorias, etc.
+  async sendTestEmail(payload: {
+    to: string;
+    template:
+      | 'ORDER_CREATED'
+      | 'PAYMENT_APPROVED'
+      | 'ORDER_PROCESSING'
+      | 'ORDER_SHIPPED'
+      | 'ORDER_DELIVERED';
+    customerName?: string;
+    orderId?: string;
+    totalAmount?: number;
+    carrier?: string;
+    postedAt?: string;
+    trackingCode?: string;
+    trackingUrl?: string;
+  }) {
+    const orderId = payload.orderId || `TEST-${Date.now()}`;
+    const customerName = payload.customerName || 'Cliente Teste';
+    const totalAmount = Number(payload.totalAmount || 199.9);
+
+    switch (payload.template) {
+      case 'ORDER_CREATED':
+        await this.notificationsService.sendOrderConfirmationEmail(
+          payload.to,
+          orderId,
+          totalAmount,
+          customerName,
+        );
+        break;
+      case 'PAYMENT_APPROVED':
+        await this.notificationsService.sendPaymentConfirmationEmail(
+          payload.to,
+          orderId,
+          totalAmount,
+          customerName,
+        );
+        break;
+      case 'ORDER_PROCESSING':
+        await this.notificationsService.sendOrderProcessingEmail(payload.to, {
+          orderId,
+          customerName,
+        });
+        break;
+      case 'ORDER_SHIPPED':
+        await this.notificationsService.sendOrderShippedEmail(payload.to, {
+          orderId,
+          customerName,
+          carrier: payload.carrier || 'Correios',
+          postedAt: payload.postedAt || new Date().toISOString().slice(0, 10),
+          trackingCode: payload.trackingCode || 'QG123456789BR',
+          trackingUrl:
+            payload.trackingUrl ||
+            'https://rastreamento.correios.com.br/app/index.php?objeto=QG123456789BR',
+        });
+        break;
+      case 'ORDER_DELIVERED':
+        await this.notificationsService.sendOrderDeliveredEmail(payload.to, {
+          orderId,
+          customerName,
+        });
+        break;
+    }
+
+    return {
+      ok: true,
+      sentTo: payload.to,
+      template: payload.template,
+      orderId,
+    };
+  }
 }

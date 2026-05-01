@@ -8,7 +8,11 @@ import {
   Delete,
   Query,
   Header,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -19,6 +23,12 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
+type UploadedImageFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+};
+
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -28,6 +38,17 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);
+  }
+
+  @Post('upload-image')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @UseInterceptors(FileInterceptor('file'))
+  uploadImage(@UploadedFile() file?: UploadedImageFile) {
+    if (!file) {
+      throw new BadRequestException('Arquivo de imagem é obrigatório.');
+    }
+    return this.productsService.uploadImage(file);
   }
 
   @Get()

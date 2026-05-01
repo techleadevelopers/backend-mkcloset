@@ -1,40 +1,53 @@
-// src/admin/admin.controller.ts
-import {
-  Controller,
-  Post,
-  Param,
-  Body,
-  UseGuards,
-  Patch,
-  Get,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { OrderStatus, Role } from '@prisma/client';
+import { AntifraudStatus } from 'src/antifraud/antifraud.service';
+import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Role } from '@prisma/client';
-import { AdminService } from './admin.service'; // NOVO: Importe o AdminService
-import { AntifraudStatus } from 'src/antifraud/antifraud.service'; // Importe o tipo AntifraudStatus
+import { AdminService } from './admin.service';
 
-// Exemplo de DTO para reembolso
 class InitiateRefundDto {
-  amount?: number; // Opcional, para reembolso parcial
+  amount?: number;
 }
 
-// Exemplo de DTO para atualização de status antifraude
 class UpdateAntifraudStatusDto {
-  status: AntifraudStatus; // Use o tipo correto
+  status: AntifraudStatus;
   reason?: string;
 }
 
-@UseGuards(JwtAuthGuard, RolesGuard) // Protege todas as rotas do admin
+class UpdateOrderStatusDto {
+  status: OrderStatus;
+  carrier?: string;
+  postedAt?: string;
+  trackingCode?: string;
+  trackingUrl?: string;
+  notifyStage?: 'PROCESSING';
+}
+
+class SendTestEmailDto {
+  to: string;
+  template:
+    | 'ORDER_CREATED'
+    | 'PAYMENT_APPROVED'
+    | 'ORDER_PROCESSING'
+    | 'ORDER_SHIPPED'
+    | 'ORDER_DELIVERED';
+  customerName?: string;
+  orderId?: string;
+  totalAmount?: number;
+  carrier?: string;
+  postedAt?: string;
+  trackingCode?: string;
+  trackingUrl?: string;
+}
+
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin')
 export class AdminController {
-  constructor(
-    private readonly adminService: AdminService, // NOVO: Injete o AdminService
-  ) {}
+  constructor(private readonly adminService: AdminService) {}
 
   @Post('refunds/:transactionId')
-  @Roles(Role.ADMIN) // Somente administradores podem iniciar reembolsos
+  @Roles(Role.ADMIN)
   async initiateRefund(
     @Param('transactionId') transactionId: string,
     @Body() initiateRefundDto: InitiateRefundDto,
@@ -46,7 +59,7 @@ export class AdminController {
   }
 
   @Patch('antifraud/transactions/:transactionId/status')
-  @Roles(Role.ADMIN) // Somente administradores podem alterar status antifraude
+  @Roles(Role.ADMIN)
   async updateAntifraudStatus(
     @Param('transactionId') transactionId: string,
     @Body() updateAntifraudStatusDto: UpdateAntifraudStatusDto,
@@ -59,16 +72,39 @@ export class AdminController {
   }
 
   @Get('orders')
-  @Roles(Role.ADMIN) // Apenas administradores
+  @Roles(Role.ADMIN)
   async getAllOrders() {
     return this.adminService.getAllOrdersForAdmin();
   }
 
+  @Patch('orders/:orderId/status')
+  @Roles(Role.ADMIN)
+  async updateOrderStatus(
+    @Param('orderId') orderId: string,
+    @Body() updateOrderStatusDto: UpdateOrderStatusDto,
+  ) {
+    return this.adminService.updateOrderStatus(
+      orderId,
+      updateOrderStatusDto.status,
+      {
+        carrier: updateOrderStatusDto.carrier,
+        postedAt: updateOrderStatusDto.postedAt,
+        trackingCode: updateOrderStatusDto.trackingCode,
+        trackingUrl: updateOrderStatusDto.trackingUrl,
+        notifyStage: updateOrderStatusDto.notifyStage,
+      },
+    );
+  }
+
   @Get('payment-logs')
-  @Roles(Role.ADMIN) // Logs de pagamento apenas para ADMIN
+  @Roles(Role.ADMIN)
   async listPaymentLogs() {
     return this.adminService.getTransactionLogs();
   }
 
-  // Outros endpoints administrativos podem ser adicionados aqui
+  @Post('test-email')
+  @Roles(Role.ADMIN)
+  async sendTestEmail(@Body() sendTestEmailDto: SendTestEmailDto) {
+    return this.adminService.sendTestEmail(sendTestEmailDto);
+  }
 }

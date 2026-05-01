@@ -883,6 +883,7 @@ private async updatePaymentIntent(
           recipientEmail,
           order.id,
           order.totalAmount.toNumber(),
+          order.user?.name ?? order.guestName,
         );
       }
     } catch (emailError) {

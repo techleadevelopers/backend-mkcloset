@@ -399,6 +399,9 @@ export class OrdersService {
           recipientEmail,
           order.id,
           order.totalAmount.toNumber(),
+          finalUserId
+            ? (await this.usersService.findOne(finalUserId)).name
+            : guestContactInfo?.name,
         );
       }
     } catch (emailError) {

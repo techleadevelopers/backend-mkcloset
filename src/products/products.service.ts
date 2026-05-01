@@ -1,14 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
+import { ConfigService } from 'src/config/config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductEntity } from './entities/product.entity';
 
+type UploadedImageFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+};
+
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   private sanitizeStringArray(values?: string[]): string[] {
     if (!Array.isArray(values)) return [];
@@ -32,6 +43,44 @@ export class ProductsService {
 
   private formatProduct(product: any): ProductEntity {
     return new ProductEntity(product);
+  }
+
+  async uploadImage(file: UploadedImageFile): Promise<{ secureUrl: string }> {
+    if (!file.mimetype?.startsWith('image/')) {
+      throw new Error('Arquivo inválido. Envie uma imagem.');
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = 'mkcloset/products';
+    const signature = createHash('sha1')
+      .update(`folder=${folder}&timestamp=${timestamp}${this.configService.cloudinaryApiSecret}`)
+      .digest('hex');
+
+    const formData = new FormData();
+    formData.append('file', new Blob([file.buffer], { type: file.mimetype }), file.originalname);
+    formData.append('api_key', this.configService.cloudinaryApiKey);
+    formData.append('timestamp', String(timestamp));
+    formData.append('folder', folder);
+    formData.append('signature', signature);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${this.configService.cloudinaryCloudName}/image/upload`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error('Falha ao enviar imagem para o Cloudinary.');
+    }
+
+    const payload = (await response.json()) as { secure_url?: string };
+    if (!payload.secure_url) {
+      throw new Error('Cloudinary não retornou a URL da imagem.');
+    }
+
+    return { secureUrl: payload.secure_url };
   }
 
   async create(createProductDto: CreateProductDto): Promise<ProductEntity> {
