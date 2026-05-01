@@ -7,6 +7,7 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { PaymentsModule } from 'src/payments/payments.module';
 import { OrdersModule } from 'src/orders/orders.module';
 import { AntifraudModule } from 'src/antifraud/antifraud.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AntifraudModule } from 'src/antifraud/antifraud.module';
     PaymentsModule, // Importa PagSeguroService e PaymentsService
     OrdersModule, // Importa OrdersService
     AntifraudModule, // Importa AntifraudService
+    NotificationsModule,
   ],
   controllers: [AdminController],
   providers: [
