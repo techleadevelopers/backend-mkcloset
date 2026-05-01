@@ -1,4 +1,3 @@
-// src/admin/admin.module.ts
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
@@ -12,18 +11,13 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 @Module({
   imports: [
     PrismaModule,
-    PaymentsModule, // Importa PagSeguroService e PaymentsService
-    OrdersModule, // Importa OrdersService
-    AntifraudModule, // Importa AntifraudService
+    PaymentsModule,
+    OrdersModule,
+    AntifraudModule,
     NotificationsModule,
   ],
   controllers: [AdminController],
-  providers: [
-    AdminService,
-    RefundsService, // Mantém como provider local para evitar problemas de injeção
-  ],
-  exports: [
-    AdminService, // Exporta se precisar usar AdminService em outros módulos
-  ],
+  providers: [AdminService, RefundsService],
+  exports: [AdminService],
 })
 export class AdminModule {}
