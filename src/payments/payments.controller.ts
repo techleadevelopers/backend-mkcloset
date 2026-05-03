@@ -35,6 +35,50 @@ export class PaymentsController {
     private readonly configService: ConfigService,
   ) {}
 
+  private extractWebhookSignature(
+    headers: Record<string, string | string[] | undefined>,
+  ): string {
+    const candidates = [
+      headers['x-pagseguro-signature'],
+      headers['x-pagbank-signature'],
+      headers['x-signature'],
+    ];
+
+    for (const value of candidates) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+      if (Array.isArray(value) && value[0]?.trim()) {
+        return value[0].trim();
+      }
+    }
+
+    return '';
+  }
+
+  private extractWebhookIdentifier(payload: any): string | null {
+    const candidates = [
+      payload?.id,
+      payload?.checkout_id,
+      payload?.order_id,
+      payload?.payment_id,
+      payload?.charge_id,
+      payload?.payment?.id,
+      payload?.payment?.checkout_id,
+      payload?.payment?.order_id,
+      payload?.data?.id,
+      payload?.data?.checkout_id,
+    ];
+
+    for (const value of candidates) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    return null;
+  }
+
   private verifyGuest(guestId?: string, signature?: string) {
     if (!guestId) {
       throw new BadRequestException('guestId é obrigatório para convidados.');
@@ -125,11 +169,12 @@ export class PaymentsController {
   @Post('webhook/pagseguro')
   async handlePagSeguroWebhook(
     @Body() payload: any,
-    @Headers('x-pagseguro-signature') signature: string, // NOVO: Captura o cabeçalho de assinatura
-    @Req() req: Request, // AQUI É ONDE O ERRO OCORRIA
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: Request,
   ) {
     this.logger.log('Webhook do PagSeguro recebido.');
-    const pagSeguroCheckoutId = payload.id || payload.checkout_id;
+    const signature = this.extractWebhookSignature(headers);
+    const pagSeguroCheckoutId = this.extractWebhookIdentifier(payload);
 
     if (!pagSeguroCheckoutId) {
       this.logger.error(
@@ -154,4 +199,18 @@ export class PaymentsController {
       payload,
     );
   }
+
+  // 🔥 NOVO ENDPOINT: Cancelar pedidos expirados (pode ser chamado manualmente ou por cron job)
+  @Post('cancel-expired')
+  @UseGuards(JwtAuthGuard)
+  async cancelExpiredOrders() {
+    this.logger.log('Requisição para cancelar pedidos expirados recebida.');
+    const result = await this.paymentsService.cancelExpiredPaymentIntents();
+    return {
+      message: 'Verificação de pedidos expirados concluída',
+      cancelledCount: result.cancelledCount,
+      expiredIntentsFound: result.expiredCount,
+    };
+  }
 }
+
