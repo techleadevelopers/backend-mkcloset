@@ -41,6 +41,15 @@ export class PaymentExpirationService {
     for (const intent of expiredIntents) {
       try {
         await this.prisma.$transaction(async (prisma) => {
+          const validUserId = intent.userId
+            ? (
+                await prisma.user.findUnique({
+                  where: { id: intent.userId },
+                  select: { id: true },
+                })
+              )?.id ?? null
+            : null;
+
           await prisma.$executeRaw`
             UPDATE "PaymentIntent"
             SET status = ${PaymentIntentStatus.EXPIRED}::"PaymentIntentStatus",
@@ -57,14 +66,14 @@ export class PaymentExpirationService {
             where: { orderId: intent.orderId },
             create: {
               orderId: intent.orderId,
-              userId: intent.userId,
+              userId: validUserId,
               amount: intent.amount,
               type: TransactionType.REFUND,
               status: 'EXPIRED',
               description: `Pedido cancelado automaticamente apos ${expirationMinutes} minutos sem pagamento`,
             },
             update: {
-              userId: intent.userId,
+              userId: validUserId,
               amount: intent.amount,
               type: TransactionType.REFUND,
               status: 'EXPIRED',
