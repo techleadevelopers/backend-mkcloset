@@ -77,7 +77,7 @@ const PAYMENT_TRANSITIONS: Record<
   PaymentIntentStatus,
   PaymentIntentStatus[]
 > = {
-  CREATED: ['PENDING'],
+  CREATED: ['PENDING', 'CONFIRMED', 'FAILED', 'CANCELLED', 'EXPIRED'],
   PENDING: ['CONFIRMED', 'FAILED', 'CANCELLED', 'EXPIRED'],
   CONFIRMED: [],
   FAILED: [],
@@ -211,7 +211,7 @@ export class PaymentsService {
         status: 'FAILED',
         metadata: {
           ...(intent.metadata as object | null),
-          error: (error as Error).message,  // <-- CORRIGIDO
+          error: (error as Error).message,
         },
       });
       throw this.rethrowProviderError(
@@ -226,113 +226,12 @@ export class PaymentsService {
     userId: string | undefined,
     processPaymentDto: ProcessPaymentDto,
   ): Promise<any> {
-    const { cardToken, cardHolderName, cardCpf, cardInstallments, cardBrand } =
-      processPaymentDto;
-
-    if (!cardToken || !cardHolderName || !cardCpf) {
-      throw new BadRequestException(
-        'Dados do carão incompletos para processamento direto.',
-      );
-    }
-
-    const order = await this.getPayableOrder(orderId, userId);
-    const existingIntent = await this.findPaymentIntent(
-      order.id,
-      'PAGSEGURO_CARD',
+    void orderId;
+    void userId;
+    void processPaymentDto;
+    throw new BadRequestException(
+      'Fluxo direto de cartao desativado. Use o checkout hospedado do PagBank.',
     );
-
-    if (existingIntent) {
-      this.logger.log(
-        `Intent de cartão já¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
-      );
-      return this.buildCardResponseFromIntent(existingIntent);
-    }
-
-    const { customer, shippingAddress, items } =
-      this.buildPagSeguroPayload(order);
-    const antifraudResult = await this.runAntifraud(
-      order,
-      customer,
-      'CREDIT_CARD',
-      {
-        brand: cardBrand,
-        installments: cardInstallments,
-      },
-    );
-    const backendUrl = this.requireBackendUrl();
-
-    const intent = await this.claimPaymentIntent({
-      order,
-      userId,
-      gateway: 'PAGSEGURO_CARD',
-      description: `Pagamento com Cartão de Crédito para Pedido #${order.id}`,
-      metadata: {
-        paymentMethod: 'CREDIT_CARD',
-        cardBrand: cardBrand ?? null,
-        installments: cardInstallments ?? 1,
-      },
-    });
-
-    try {
-      const pagSeguroResponse =
-        await this.pagSeguroService.processDirectCreditCardPayment(
-          {
-            orderId: order.id,
-            amount: order.totalAmount,
-            description: `Pagamento do Pedido #${order.id} na MKCloset`,
-            customer,
-            shippingAddress,
-            shippingService: order.shippingService,
-            shippingPrice: order.shippingPrice,
-            items,
-            cardDetails: {
-              token: cardToken,
-              holderName: cardHolderName,
-              cpf: cardCpf,
-              installments: cardInstallments,
-            },
-          },
-          backendUrl,
-        );
-
-      const normalizedStatus = this.mapExternalStatusToIntentStatus(
-        pagSeguroResponse.status,
-      );
-      const updatedIntent = await this.updatePaymentIntent(intent.id, {
-        status: normalizedStatus,
-        externalOrderId: pagSeguroResponse.transactionId,
-        externalChargeId: pagSeguroResponse.transactionRef ?? null,
-        transactionRef: pagSeguroResponse.transactionRef ?? null,
-        metadata: {
-          ...(intent.metadata as object | null),
-          providerStatus: pagSeguroResponse.status,
-        },
-      });
-
-      await this.syncTransactionFromIntent(
-        order,
-        updatedIntent,
-        antifraudResult.status,
-      );
-
-      if (updatedIntent.status === 'CONFIRMED') {
-        await this.markOrderPaid(order);
-      }
-
-      return this.buildCardResponseFromIntent(updatedIntent);
-    } catch (error) {
-      await this.updatePaymentIntent(intent.id, {
-        status: 'FAILED',
-        metadata: {
-          ...(intent.metadata as object | null),
-          error: (error as Error).message,  // <-- CORRIGIDO
-        },
-      });
-      throw this.rethrowProviderError(
-        error,
-        'Falha ao processar pagamento com cartão de crédito.',
-      );
-    }
   }
 
   async initiatePagSeguroRedirectCheckout(
@@ -366,10 +265,16 @@ export class PaymentsService {
       userId,
       gateway: 'PAGSEGURO_REDIRECT',
       description: `Checkout PagSeguro para Pedido #${order.id}`,
-      metadata: { paymentMethod: 'REDIRECT_CHECKOUT' },
+      metadata: {
+        paymentMethod:
+          order.paymentMethod === 'CREDIT_CARD'
+            ? 'CREDIT_CARD_CHECKOUT'
+            : 'REDIRECT_CHECKOUT',
+      },
     });
 
     try {
+      const isCreditCardCheckout = order.paymentMethod === 'CREDIT_CARD';
       const pagSeguroResponse =
         await this.pagSeguroService.createPagSeguroCheckoutRedirect(
           {
@@ -381,6 +286,13 @@ export class PaymentsService {
             shippingService: order.shippingService,
             shippingPrice: order.shippingPrice,
             items,
+            checkoutOptions: isCreditCardCheckout
+              ? {
+                  paymentMethods: ['CREDIT_CARD'],
+                  softDescriptor: 'MKCLOSET',
+                  activateIfInactive: true,
+                }
+              : undefined,
           },
           backendUrl,
         );
@@ -392,6 +304,7 @@ export class PaymentsService {
         metadata: {
           ...(intent.metadata as object | null),
           providerStatus: 'PENDING_REDIRECT',
+          checkoutMode: isCreditCardCheckout ? 'CREDIT_CARD' : 'DEFAULT',
         },
       });
 
@@ -407,7 +320,7 @@ export class PaymentsService {
         status: 'FAILED',
         metadata: {
           ...(intent.metadata as object | null),
-          error: (error as Error).message,  // <-- CORRIGIDO
+          error: (error as Error).message,
         },
       });
       throw this.rethrowProviderError(
@@ -448,7 +361,10 @@ export class PaymentsService {
       throw new UnauthorizedException('Assinatura do webhook invÃ¡lida.');
     }
 
-    const intent = await this.findPaymentIntentByExternalId(pagSeguroCheckoutId);
+    const intent = await this.findPaymentIntentForWebhook(
+      pagSeguroCheckoutId,
+      payload,
+    );
     if (!intent) {
       this.logger.warn(
         `Webhook recebido para ${pagSeguroCheckoutId}, mas nenhum payment intent correspondente foi encontrado.`,
@@ -459,19 +375,25 @@ export class PaymentsService {
     }
 
     const providerDetails = await this.fetchProviderDetails(intent);
-    const providerStatus =
-      providerDetails.status ?? providerDetails.charges?.[0]?.status ?? 'PENDING';
+    const providerStatus = this.extractProviderStatus(providerDetails, payload);
     const desiredState = this.mapExternalStatusToIntentStatus(providerStatus);
-    const nextState = this.applyTransition(intent.status, desiredState);
+
+    this.logger.log(
+      `[PaymentsService] Resultado do webhook ${pagSeguroCheckoutId}: providerStatus=${providerStatus}, desiredState=${desiredState}, gateway=${intent.gateway}, orderId=${intent.orderId}`,
+    );
 
     const updatedIntent = await this.updatePaymentIntent(intent.id, {
-      status: nextState,
+      status: desiredState,
       externalChargeId:
         providerDetails.charges?.[0]?.id ??
+        providerDetails.payments?.[0]?.id ??
+        providerDetails.transactions?.[0]?.id ??
         providerDetails.qr_codes?.[0]?.id ??
         intent.externalChargeId,
       transactionRef:
         providerDetails.charges?.[0]?.id ??
+        providerDetails.payments?.[0]?.reference_id ??
+        providerDetails.transactions?.[0]?.reference_id ??
         providerDetails.qr_codes?.[0]?.text ??
         intent.transactionRef,
       qrCodeText:
@@ -636,6 +558,65 @@ export class PaymentsService {
     return intent ?? null;
   }
 
+  private extractWebhookIdentifiers(payload: any): string[] {
+    const candidates = [
+      payload?.id,
+      payload?.checkout_id,
+      payload?.order_id,
+      payload?.payment_id,
+      payload?.charge_id,
+      payload?.reference_id,
+      payload?.payment?.id,
+      payload?.payment?.checkout_id,
+      payload?.payment?.order_id,
+      payload?.payment?.reference_id,
+      payload?.data?.id,
+      payload?.data?.checkout_id,
+      payload?.data?.order_id,
+      payload?.data?.reference_id,
+    ];
+
+    return Array.from(
+      new Set(
+        candidates
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  private async findPaymentIntentForWebhook(
+    externalId: string,
+    payload: any,
+  ): Promise<PaymentIntentRecord | null> {
+    const identifiers = Array.from(
+      new Set([externalId, ...this.extractWebhookIdentifiers(payload)]),
+    );
+
+    const conditions = identifiers.flatMap((identifier) => [
+      Prisma.sql`"externalOrderId" = ${identifier}`,
+      Prisma.sql`"externalChargeId" = ${identifier}`,
+      Prisma.sql`"orderId" = ${identifier}`,
+    ]);
+
+    if (conditions.length === 0) {
+      return null;
+    }
+
+    const [intent] = await this.prisma.$queryRaw<PaymentIntentRecord[]>(
+      Prisma.sql`
+        SELECT *
+        FROM "PaymentIntent"
+        WHERE ${Prisma.join(conditions, ' OR ')}
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      `,
+    );
+
+    return intent ?? null;
+  }
+
   private async claimPaymentIntent(params: {
   order: OrderWithDetails;
   userId?: string;
@@ -669,7 +650,7 @@ export class PaymentsService {
         ${crypto.randomUUID()},
         ${order.userId ?? userId ?? null},
         ${order.id},
-        ${gateway},  -- <-- AQUI SEM CAST!
+        ${gateway},
         ${'PENDING'}::"PaymentIntentStatus",
         ${order.totalAmount},
         ${'BRL'},
@@ -782,6 +763,43 @@ private async updatePaymentIntent(
     }
   }
 
+  private extractProviderStatus(providerDetails: any, payload: any): string {
+    const candidates = [
+      payload?.payment_status,
+      payload?.transaction_status,
+      payload?.payment?.status,
+      payload?.payment?.transaction_status,
+      payload?.payment?.charges?.[0]?.status,
+      payload?.payment?.transactions?.[0]?.status,
+      payload?.payments?.[0]?.status,
+      payload?.charges?.[0]?.status,
+      payload?.data?.status,
+      payload?.data?.payment_status,
+      payload?.data?.payments?.[0]?.status,
+      payload?.data?.charges?.[0]?.status,
+      providerDetails?.charges?.[0]?.status,
+      providerDetails?.charges?.[0]?.last_transaction?.status,
+      providerDetails?.payments?.[0]?.status,
+      providerDetails?.payments?.[0]?.charges?.[0]?.status,
+      providerDetails?.payments?.[0]?.transactions?.[0]?.status,
+      providerDetails?.transactions?.[0]?.status,
+      providerDetails?.transactions?.[0]?.payment_status,
+      providerDetails?.last_payment?.status,
+      providerDetails?.payment_response?.status,
+      providerDetails?.payment_status,
+      payload?.status,
+      providerDetails?.status,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    return 'PENDING';
+  }
+
   private async syncTransactionFromIntent(
     order: OrderWithDetails,
     intent: PaymentIntentRecord,
@@ -876,21 +894,21 @@ private async updatePaymentIntent(
       }
     });
 
-    try {
-      const recipientEmail = order.user?.email ?? order.guestEmail;
-      if (recipientEmail) {
-        await this.notificationsService.sendPaymentConfirmationEmail(
+    const recipientEmail = order.user?.email ?? order.guestEmail;
+    if (recipientEmail) {
+      void this.notificationsService
+        .sendPaymentConfirmationEmail(
           recipientEmail,
           order.id,
           order.totalAmount.toNumber(),
           order.user?.name ?? order.guestName,
-        );
-      }
-    } catch (emailError) {
-  this.logger.error(
-    `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${(emailError as Error).message}`,  // <-- CORRIGIDO
-  );
-}
+        )
+        .catch((emailError) => {
+          this.logger.error(
+            `Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${(emailError as Error).message}`,
+          );
+        });
+    }
   }
 
   private buildPixResponseFromIntent(
@@ -1009,5 +1027,69 @@ private async updatePaymentIntent(
       throw error;
     }
     throw new InternalServerErrorException(fallbackMessage);
+  }
+
+  // 🔥 NOVO MÉTODO: Cancelar PaymentIntents expirados
+  async cancelExpiredPaymentIntents(): Promise<{ cancelledCount: number; expiredCount: number }> {
+    this.logger.log('Verificando PaymentIntents expirados...');
+
+    const now = new Date();
+    const expirationMinutes = 30;
+
+    const expiredIntents = await this.prisma.$queryRaw<any[]>`
+      SELECT pi.*, o.status as order_status
+      FROM "PaymentIntent" pi
+      JOIN "Order" o ON o.id = pi."orderId"
+      WHERE pi.status = 'PENDING'
+        AND pi."expiresAt" IS NOT NULL
+        AND pi."expiresAt" < ${now}
+        AND o.status = 'PENDING'
+    `;
+
+    let cancelledCount = 0;
+
+    for (const intent of expiredIntents) {
+      try {
+        await this.prisma.$transaction(async (prisma) => {
+          // 1. Atualiza PaymentIntent para EXPIRED
+          await prisma.$executeRaw`
+            UPDATE "PaymentIntent"
+            SET status = 'EXPIRED'::"PaymentIntentStatus",
+                "updatedAt" = NOW()
+            WHERE id = ${intent.id}
+          `;
+
+          // 2. Cancela o pedido
+          await prisma.order.update({
+            where: { id: intent.orderId },
+            data: { status: OrderStatus.CANCELLED },
+          });
+
+          // 3. Registra transação de cancelamento
+          await prisma.transaction.create({
+            data: {
+              orderId: intent.orderId,
+              userId: intent.userId,
+              amount: intent.amount,
+              type: TransactionType.REFUND,
+              status: 'EXPIRED',
+              description: `Pedido cancelado automaticamente após ${expirationMinutes} minutos sem pagamento`,
+            },
+          });
+
+          cancelledCount++;
+          this.logger.log(`Pedido ${intent.orderId} cancelado por expiração`);
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Erro ao cancelar pedido ${intent.orderId}: ${errorMessage}`);
+      }
+    }
+
+    if (cancelledCount > 0) {
+      this.logger.log(`Total de ${cancelledCount} pedidos cancelados por expiração`);
+    }
+
+    return { cancelledCount, expiredCount: expiredIntents.length };
   }
 }
