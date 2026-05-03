@@ -389,26 +389,25 @@ export class OrdersService {
       return newOrder;
     });
 
-    // NOVO: Enviar e-mail de confirmação de pedido
-    try {
-      const recipientEmail = finalUserId
-        ? (await this.usersService.findOne(finalUserId)).email
-        : guestContactInfo?.email;
-      if (recipientEmail) {
-        await this.notificationsService.sendOrderConfirmationEmail(
+    const customerProfile = finalUserId
+      ? await this.usersService.findOne(finalUserId)
+      : null;
+    const recipientEmail = customerProfile?.email || guestContactInfo?.email;
+    const customerName = customerProfile?.name || guestContactInfo?.name;
+
+    if (recipientEmail) {
+      void this.notificationsService
+        .sendOrderConfirmationEmail(
           recipientEmail,
           order.id,
           order.totalAmount.toNumber(),
-          finalUserId
-            ? (await this.usersService.findOne(finalUserId)).name
-            : guestContactInfo?.name,
-        );
-      }
-    } catch (emailError) {
-      this.notificationsService.logger.error(
-        `Falha ao enviar e-mail de confirmação para o pedido ${order.id}: ${emailError.message}`,
-      );
-      // Não relança o erro para não impedir a criação do pedido
+          customerName,
+        )
+        .catch((emailError) => {
+          this.notificationsService.logger.error(
+            `Falha ao enviar e-mail de confirmação para o pedido ${order.id}: ${(emailError as Error).message}`,
+          );
+        });
     }
 
     return this.attachPixData(order);
