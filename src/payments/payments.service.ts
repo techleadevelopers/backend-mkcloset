@@ -1020,6 +1020,9 @@ private async updatePaymentIntent(
 
   private rethrowProviderError(error: any, fallbackMessage: string): never {
     this.logger.error(error?.message ?? fallbackMessage, error?.stack);
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
     if (
       error instanceof InternalServerErrorException &&
       error.message.startsWith('Falha no PagSeguro:')
