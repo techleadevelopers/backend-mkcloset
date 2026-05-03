@@ -23,13 +23,21 @@ export class NotificationsService {
   private transporter: Mail;
 
   constructor(private configService: ConfigService) {
+    // 🔥 Usa os getters do ConfigService (já mapeiam SMTP_* e EMAIL_SERVICE_*)
+    const host = this.configService.emailServiceHost;
+    const port = this.configService.emailServicePort;
+    const secure = this.configService.emailServiceSecure;
+    const user = this.configService.emailServiceUser;
+    const pass = this.configService.emailServicePass;
+    this.logger.log('Servico de e-mail inicializado.');
+    
     this.transporter = nodemailer.createTransport({
-      host: this.configService.emailServiceHost,
-      port: this.configService.emailServicePort,
-      secure: this.configService.emailServiceSecure,
+      host,
+      port,
+      secure,
       auth: {
-        user: this.configService.emailServiceUser,
-        pass: this.configService.emailServicePass,
+        user,
+        pass,
       },
     });
   }
