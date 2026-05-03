@@ -2,9 +2,11 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import Mail from 'nodemailer/lib/mailer';
 import * as nodemailer from 'nodemailer';
+import * as net from 'net';
 import { ConfigService } from 'src/config/config.service';
 
 type OrderEmailContext = {
@@ -18,7 +20,7 @@ type OrderEmailContext = {
 };
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit {
   public readonly logger = new Logger(NotificationsService.name);
   private transporter: Mail;
 
@@ -35,10 +37,64 @@ export class NotificationsService {
       host,
       port,
       secure,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
       auth: {
         user,
         pass,
       },
+    });
+  }
+
+  async onModuleInit(): Promise<void> {
+    const host = this.configService.emailServiceHost;
+    if (!host) {
+      return;
+    }
+
+    await Promise.all([
+      this.testTcpConnectivity(host, 587),
+      this.testTcpConnectivity(host, 465),
+    ]);
+
+    try {
+      await this.transporter.verify();
+      this.logger.log('SMTP verify concluido com sucesso.');
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`SMTP verify falhou: ${err.message}`, err.stack);
+    }
+  }
+
+  private async testTcpConnectivity(
+    host: string,
+    port: number,
+  ): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const socket = net.createConnection({ host, port });
+      const startedAt = Date.now();
+
+      socket.setTimeout(8000);
+
+      socket.on('connect', () => {
+        this.logger.log(
+          `SMTP TCP OK ${host}:${port} em ${Date.now() - startedAt}ms`,
+        );
+        socket.end();
+        resolve();
+      });
+
+      socket.on('timeout', () => {
+        this.logger.warn(`SMTP TCP TIMEOUT ${host}:${port}`);
+        socket.destroy();
+        resolve();
+      });
+
+      socket.on('error', (error: Error) => {
+        this.logger.warn(`SMTP TCP ERROR ${host}:${port} - ${error.message}`);
+        resolve();
+      });
     });
   }
 
