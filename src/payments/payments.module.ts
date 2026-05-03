@@ -1,5 +1,6 @@
 // src/payments/payments.module.ts
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule'; // 🔥 ADICIONADO
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { PrismaModule } from 'src/prisma/prisma.module';
@@ -8,9 +9,11 @@ import { ConfigModule } from 'src/config/config.module';
 import { PagSeguroService } from './providers/pagseguro.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AntifraudModule } from 'src/antifraud/antifraud.module';
+import { PaymentExpirationService } from './expiration.service'; 
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     PrismaModule,
     OrdersModule,
     ConfigModule,
@@ -21,6 +24,7 @@ import { AntifraudModule } from 'src/antifraud/antifraud.module';
   providers: [
     PaymentsService,
     PagSeguroService, // Serviço de integração com PagSeguro
+    PaymentExpirationService, // Serviço para lidar com expiração de pedidos
   ],
   exports: [
     PaymentsService,
