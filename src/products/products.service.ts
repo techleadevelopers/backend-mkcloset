@@ -5,6 +5,7 @@ import { ConfigService } from 'src/config/config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { normalizeProductColorLabels } from './product-colors';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductEntity } from './entities/product.entity';
 
@@ -126,7 +127,9 @@ export class ProductsService {
       createProductDto.imageUrl,
     );
     const sizes = this.sanitizeStringArray(createProductDto.sizes);
-    const colors = this.sanitizeStringArray(createProductDto.colors);
+    const colors = normalizeProductColorLabels(
+      this.sanitizeStringArray(createProductDto.colors),
+    );
     const stock = Math.max(0, Number(createProductDto.stock) || 0);
     const discount =
       createProductDto.discount !== undefined &&
@@ -200,7 +203,9 @@ export class ProductsService {
     }
 
     if (colors) {
-      where.colors = { hasSome: colors.split(',') };
+      where.colors = {
+        hasSome: normalizeProductColorLabels(colors.split(',')),
+      };
     }
 
     if (sizes) {
@@ -314,7 +319,9 @@ export class ProductsService {
     }
 
     if (updateProductDto.colors !== undefined) {
-      data.colors = this.sanitizeStringArray(updateProductDto.colors);
+      data.colors = normalizeProductColorLabels(
+        this.sanitizeStringArray(updateProductDto.colors),
+      );
     }
 
     if (
