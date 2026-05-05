@@ -176,13 +176,7 @@ export class ProductsService {
       limit,
     } = query;
 
-    const includeAll = query.includeAll === 'true';
-
-    const where: Prisma.ProductWhereInput = includeAll
-      ? {}
-      : {
-          stock: { gt: 0 },
-        };
+    const where: Prisma.ProductWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -238,7 +232,7 @@ export class ProductsService {
 
   async findFeatured(): Promise<ProductEntity[]> {
     const featuredProducts = await this.prisma.product.findMany({
-      where: { isFeatured: true, stock: { gt: 0 } },
+      where: { isFeatured: true },
       include: { category: true },
     });
 
