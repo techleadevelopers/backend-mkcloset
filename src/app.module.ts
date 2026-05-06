@@ -22,6 +22,7 @@ import { ConfigModule } from './config/config.module'; // Seu ConfigModule custo
 import { NotificationsModule } from './notifications/notifications.module'; // NOVO: Módulo de Notificações
 import { AntifraudModule } from './antifraud/antifraud.module'; // NOVO: Módulo Antifraude
 import { AdminModule } from './admin/admin.module'; // NOVO: Módulo Administrativo
+import { HomeContentModule } from './home-content/home-content.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { AdminModule } from './admin/admin.module'; // NOVO: Módulo Administrat
     NotificationsModule, // Para envio de e-mails transacionais
     AntifraudModule, // Para integração com ferramentas antifraude
     AdminModule, // Para funcionalidades administrativas (ex: gestão de reembolsos)
+    HomeContentModule,
   ],
   controllers: [AppController], // Controladores principais da aplicação
   providers: [AppService], // Provedores principais da aplicação
