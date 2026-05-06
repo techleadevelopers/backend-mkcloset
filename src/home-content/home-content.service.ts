@@ -9,7 +9,8 @@ export class HomeContentService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findOne() {
-    return this.prisma.homeContent.upsert({
+    const prisma = this.prisma as any;
+    return prisma.homeContent.upsert({
       where: { id: HOME_CONTENT_ID },
       update: {},
       create: { id: HOME_CONTENT_ID, bannerImages: [] },
@@ -21,7 +22,8 @@ export class HomeContentService {
       .map((item) => item.trim())
       .filter(Boolean);
 
-    return this.prisma.homeContent.upsert({
+    const prisma = this.prisma as any;
+    return prisma.homeContent.upsert({
       where: { id: HOME_CONTENT_ID },
       update: { bannerImages },
       create: { id: HOME_CONTENT_ID, bannerImages },
