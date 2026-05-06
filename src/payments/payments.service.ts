@@ -72,7 +72,6 @@ type PaymentIntentRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
-
 const PAYMENT_TRANSITIONS: Record<
   PaymentIntentStatus,
   PaymentIntentStatus[]
@@ -84,6 +83,8 @@ const PAYMENT_TRANSITIONS: Record<
   CANCELLED: [],
   EXPIRED: [],
 };
+
+const PAYMENT_INTENT_EXPIRATION_MINUTES = 30;
 
 @Injectable()
 export class PaymentsService {
@@ -301,6 +302,7 @@ export class PaymentsService {
         status: 'CREATED',
         externalOrderId: pagSeguroResponse.pagSeguroCheckoutId,
         transactionRef: pagSeguroResponse.redirectUrl,
+        expiresAt: this.buildDefaultIntentExpiration(intent.createdAt),
         metadata: {
           ...(intent.metadata as object | null),
           providerStatus: 'PENDING_REDIRECT',
@@ -522,6 +524,12 @@ export class PaymentsService {
 
   private buildIdempotencyKey(orderId: string, gateway: PaymentIntentGateway) {
     return `${gateway.toLowerCase()}:${orderId}`;
+  }
+
+  private buildDefaultIntentExpiration(baseDate: Date = new Date()): Date {
+    return new Date(
+      baseDate.getTime() + PAYMENT_INTENT_EXPIRATION_MINUTES * 60 * 1000,
+    );
   }
 
   private async findPaymentIntent(
@@ -1033,19 +1041,29 @@ private async updatePaymentIntent(
   }
 
   // 🔥 NOVO MÉTODO: Cancelar PaymentIntents expirados
-  async cancelExpiredPaymentIntents(): Promise<{ cancelledCount: number; expiredCount: number }> {
+  async cancelExpiredPaymentIntents(): Promise<{
+    cancelledCount: number;
+    expiredCount: number;
+  }> {
     this.logger.log('Verificando PaymentIntents expirados...');
 
     const now = new Date();
-    const expirationMinutes = 30;
 
     const expiredIntents = await this.prisma.$queryRaw<any[]>`
-      SELECT pi.*, o.status as order_status
+      SELECT
+        pi.*,
+        o.status as order_status,
+        COALESCE(
+          pi."expiresAt",
+          pi."createdAt" + (${PAYMENT_INTENT_EXPIRATION_MINUTES} * interval '1 minute')
+        ) as "effectiveExpiresAt"
       FROM "PaymentIntent" pi
       JOIN "Order" o ON o.id = pi."orderId"
-      WHERE pi.status = 'PENDING'
-        AND pi."expiresAt" IS NOT NULL
-        AND pi."expiresAt" < ${now}
+      WHERE pi.status IN ('PENDING'::"PaymentIntentStatus", 'CREATED'::"PaymentIntentStatus")
+        AND COALESCE(
+          pi."expiresAt",
+          pi."createdAt" + (${PAYMENT_INTENT_EXPIRATION_MINUTES} * interval '1 minute')
+        ) < ${now}
         AND o.status = 'PENDING'
     `;
 
@@ -1054,7 +1072,6 @@ private async updatePaymentIntent(
     for (const intent of expiredIntents) {
       try {
         await this.prisma.$transaction(async (prisma) => {
-          // 1. Atualiza PaymentIntent para EXPIRED
           await prisma.$executeRaw`
             UPDATE "PaymentIntent"
             SET status = 'EXPIRED'::"PaymentIntentStatus",
@@ -1062,37 +1079,52 @@ private async updatePaymentIntent(
             WHERE id = ${intent.id}
           `;
 
-          // 2. Cancela o pedido
           await prisma.order.update({
             where: { id: intent.orderId },
             data: { status: OrderStatus.CANCELLED },
           });
 
-          // 3. Registra transação de cancelamento
-          await prisma.transaction.create({
-            data: {
+          await prisma.transaction.upsert({
+            where: { orderId: intent.orderId },
+            create: {
               orderId: intent.orderId,
               userId: intent.userId,
               amount: intent.amount,
               type: TransactionType.REFUND,
               status: 'EXPIRED',
-              description: `Pedido cancelado automaticamente após ${expirationMinutes} minutos sem pagamento`,
+              description: `Pedido cancelado automaticamente apos ${PAYMENT_INTENT_EXPIRATION_MINUTES} minutos sem pagamento`,
+            },
+            update: {
+              userId: intent.userId,
+              amount: intent.amount,
+              type: TransactionType.REFUND,
+              status: 'EXPIRED',
+              description: `Pedido cancelado automaticamente apos ${PAYMENT_INTENT_EXPIRATION_MINUTES} minutos sem pagamento`,
             },
           });
 
           cancelledCount++;
-          this.logger.log(`Pedido ${intent.orderId} cancelado por expiração`);
+          this.logger.log(`Pedido ${intent.orderId} cancelado por expiracao`);
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Erro ao cancelar pedido ${intent.orderId}: ${errorMessage}`);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Erro ao cancelar pedido ${intent.orderId}: ${errorMessage}`,
+        );
       }
     }
 
     if (cancelledCount > 0) {
-      this.logger.log(`Total de ${cancelledCount} pedidos cancelados por expiração`);
+      this.logger.log(
+        `Total de ${cancelledCount} pedidos cancelados por expiracao`,
+      );
     }
 
     return { cancelledCount, expiredCount: expiredIntents.length };
   }
 }
+
+
+
+
