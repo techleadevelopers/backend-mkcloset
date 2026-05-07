@@ -202,17 +202,29 @@ export class PagSeguroService {
     sandboxMode: 'mobile' | 'home' = 'mobile',
   ): { area: string; number: string; type: 'MOBILE' | 'HOME' | 'BUSINESS' } {
     const cleanedPhone = rawPhone ? rawPhone.replace(/\D/g, '') : '';
-    const phoneWithoutCountryCode =
-      cleanedPhone.length >= 12 && cleanedPhone.startsWith('55')
-        ? cleanedPhone.substring(2)
-        : cleanedPhone;
+    let normalizedPhone = cleanedPhone;
 
-    if (
-      phoneWithoutCountryCode.length === 10 ||
-      phoneWithoutCountryCode.length === 11
-    ) {
-      const area = phoneWithoutCountryCode.substring(0, 2);
-      const number = phoneWithoutCountryCode.substring(2);
+    while (normalizedPhone.length > 11 && normalizedPhone.startsWith('55')) {
+      normalizedPhone = normalizedPhone.substring(2);
+    }
+
+    if (normalizedPhone.length > 11) {
+      normalizedPhone = normalizedPhone.slice(-11);
+    }
+
+    if (normalizedPhone.length === 10 || normalizedPhone.length === 11) {
+      const area = normalizedPhone.substring(0, 2);
+      const number = normalizedPhone.substring(2);
+
+      if (number.length < 8 || number.length > 9) {
+        throw new BadRequestException(
+          `Telefone do cliente invalido para ${context}.`,
+        );
+      }
+
+      this.logger.log(
+        `[PagSeguroService] Telefone normalizado para ${context}: raw="${rawPhone ?? ''}" cleaned="${cleanedPhone}" normalized="${normalizedPhone}" area="${area}" number="${number}"`,
+      );
       return {
         area,
         number,
@@ -402,6 +414,10 @@ export class PagSeguroService {
       notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
+    this.logger.log(
+      `[PagSeguroService] Payload PIX phone para ${details.orderId}: ${JSON.stringify(payload.customer.phones?.[0])}`,
+    );
+
     this.logGatewayPayload('POST /orders', payload);
 
     try {
@@ -581,6 +597,10 @@ export class PagSeguroService {
         ? { soft_descriptor: details.checkoutOptions.softDescriptor }
         : {}),
     };
+
+    this.logger.log(
+      `[PagSeguroService] Payload checkout phone para ${details.orderId}: ${JSON.stringify(payload.customer.phones?.[0])}`,
+    );
 
     this.logGatewayPayload('POST /checkouts', payload);
 
