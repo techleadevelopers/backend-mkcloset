@@ -202,9 +202,17 @@ export class PagSeguroService {
     sandboxMode: 'mobile' | 'home' = 'mobile',
   ): { area: string; number: string; type: 'MOBILE' | 'HOME' | 'BUSINESS' } {
     const cleanedPhone = rawPhone ? rawPhone.replace(/\D/g, '') : '';
-    if (cleanedPhone.length >= 10) {
-      const area = cleanedPhone.substring(0, 2);
-      const number = cleanedPhone.substring(2);
+    const phoneWithoutCountryCode =
+      cleanedPhone.length >= 12 && cleanedPhone.startsWith('55')
+        ? cleanedPhone.substring(2)
+        : cleanedPhone;
+
+    if (
+      phoneWithoutCountryCode.length === 10 ||
+      phoneWithoutCountryCode.length === 11
+    ) {
+      const area = phoneWithoutCountryCode.substring(0, 2);
+      const number = phoneWithoutCountryCode.substring(2);
       return {
         area,
         number,
