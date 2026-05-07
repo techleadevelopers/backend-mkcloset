@@ -1057,12 +1057,12 @@ private async updatePaymentIntent(
         ) as "effectiveExpiresAt"
       FROM "PaymentIntent" pi
       JOIN "Order" o ON o.id = pi."orderId"
-      WHERE pi.status IN ('PENDING'::"PaymentIntentStatus", 'CREATED'::"PaymentIntentStatus")
+      WHERE pi.status::text IN ('PENDING', 'CREATED')
         AND COALESCE(
           pi."expiresAt",
           pi."createdAt" + (${PAYMENT_INTENT_EXPIRATION_MINUTES} * interval '1 minute')
         ) < ${now}
-        AND o.status = 'PENDING'
+        AND o.status::text = 'PENDING'
     `;
 
     let cancelledCount = 0;
