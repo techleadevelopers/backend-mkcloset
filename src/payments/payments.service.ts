@@ -110,7 +110,7 @@ export class PaymentsService {
     );
 
     if (existingIntent) {
-      this.logger.log(
+      this.logger.debug(
         `Intent PIX jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
       if (
@@ -246,7 +246,7 @@ export class PaymentsService {
     );
 
     if (existingIntent) {
-      this.logger.log(
+      this.logger.debug(
         `Intent de checkout redirecionado jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
       return this.buildRedirectResponseFromIntent(existingIntent);
@@ -346,7 +346,7 @@ export class PaymentsService {
     rawBody: string,
     payload: any,
   ) {
-    this.logger.log(
+    this.logger.debug(
       `[PaymentsService] Webhook do PagSeguro recebido para checkout/order ID: ${pagSeguroCheckoutId}`,
     );
 
@@ -380,7 +380,7 @@ export class PaymentsService {
     const providerStatus = this.extractProviderStatus(providerDetails, payload);
     const desiredState = this.mapExternalStatusToIntentStatus(providerStatus);
 
-    this.logger.log(
+    this.logger.debug(
       `[PaymentsService] Resultado do webhook ${pagSeguroCheckoutId}: providerStatus=${providerStatus}, desiredState=${desiredState}, gateway=${intent.gateway}, orderId=${intent.orderId}`,
     );
 
@@ -1045,8 +1045,6 @@ private async updatePaymentIntent(
     cancelledCount: number;
     expiredCount: number;
   }> {
-    this.logger.log('Verificando PaymentIntents expirados...');
-
     const now = new Date();
 
     const expiredIntents = await this.prisma.$queryRaw<any[]>`
@@ -1104,7 +1102,6 @@ private async updatePaymentIntent(
           });
 
           cancelledCount++;
-          this.logger.log(`Pedido ${intent.orderId} cancelado por expiracao`);
         });
       } catch (error) {
         const errorMessage =
@@ -1115,9 +1112,9 @@ private async updatePaymentIntent(
       }
     }
 
-    if (cancelledCount > 0) {
+    if (expiredIntents.length > 0 || cancelledCount > 0) {
       this.logger.log(
-        `Total de ${cancelledCount} pedidos cancelados por expiracao`,
+        `Expiracao automatica processada: intents vencidos=${expiredIntents.length}, pedidos cancelados=${cancelledCount}.`,
       );
     }
 
