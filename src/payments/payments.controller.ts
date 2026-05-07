@@ -172,7 +172,7 @@ export class PaymentsController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Req() req: Request,
   ) {
-    this.logger.log('Webhook do PagSeguro recebido.');
+    this.logger.debug('Webhook do PagSeguro recebido.');
     const signature = this.extractWebhookSignature(headers);
     const pagSeguroCheckoutId = this.extractWebhookIdentifier(payload);
 
@@ -204,7 +204,7 @@ export class PaymentsController {
   @Post('cancel-expired')
   @UseGuards(JwtAuthGuard)
   async cancelExpiredOrders() {
-    this.logger.log('Requisição para cancelar pedidos expirados recebida.');
+    this.logger.debug('Requisição para cancelar pedidos expirados recebida.');
     const result = await this.paymentsService.cancelExpiredPaymentIntents();
     return {
       message: 'Verificação de pedidos expirados concluída',
