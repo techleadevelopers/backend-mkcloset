@@ -17,13 +17,14 @@ import type { User } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { CreatePixChargeDto } from './dto/create-pix-charge.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
-import type { Request } from 'express'; // CORREÇÃO AQUI: Adicionado 'type' à importação de Request
+import { CreateCardOrderDto } from './dto/create-card-order.dto';
+import type { Request } from 'express';
 import { ConfigService } from 'src/config/config.service';
 import { createHmac } from 'crypto';
 
 // Interface para o payload do usuário injetado no req.user pelo JwtStrategy
 interface RequestUserPayload {
-  userId: string; // O ID do usuário (sub do JWT)
+  userId: string;
 }
 
 @Controller('payments')
@@ -116,15 +117,14 @@ export class PaymentsController {
     );
   }
 
-  // NOVO ENDPOINT: para criar cobrança PIX
   @Post('pix-charge/:orderId')
-  @UseGuards(OptionalJwtAuthGuard) // ALTERADO: Usa o guarda opcional para permitir convidados
+  @UseGuards(OptionalJwtAuthGuard)
   async createPixCharge(
-    @CurrentUser() user: User | undefined, // ALTERADO: Usa o decorador CurrentUser para obter o usuário (ou undefined)
+    @CurrentUser() user: User | undefined,
     @Param('orderId') orderId: string,
-    @Body() body: CreatePixChargeDto, // NOVO: Adicionado para receber o corpo da requisição, que pode conter o guestId
+    @Body() body: CreatePixChargeDto,
   ) {
-    const userId = user?.id || body.guestId; // NOVO: Obtém o ID do usuário autenticado, ou o guestId do corpo da requisição
+    const userId = user?.id || body.guestId;
     if (!userId) {
       throw new BadRequestException(
         'Usuário ou ID de convidado não fornecido.',
@@ -139,7 +139,6 @@ export class PaymentsController {
     return this.paymentsService.createPixCharge(orderId, userId);
   }
 
-  // NOVO ENDPOINT: para processar pagamentos diretos com cartão
   @Post('process-card/:orderId')
   @UseGuards(OptionalJwtAuthGuard)
   async processCardPayment(
@@ -147,14 +146,32 @@ export class PaymentsController {
     @Param('orderId') orderId: string,
     @Body() processPaymentDto: ProcessPaymentDto,
   ) {
-    const userId = user?.id; // Para pagamentos com cartão, geralmente é um usuário logado ou o guestId é parte do DTO
-    // Se o guestId for necessário e não vier do token, ele deve ser incluído no processPaymentDto
+    const userId = user?.id;
     return this.paymentsService.processCreditCardPayment(
       orderId,
       userId,
       processPaymentDto,
     );
   }
+
+ //  ENDPOINT: API Order com cartão (transparente)
+@Post('card-order/:orderId')
+@UseGuards(OptionalJwtAuthGuard)
+async processCardOrder(
+  @CurrentUser() user: User | undefined,
+  @Param('orderId') orderId: string,
+  @Body() dto: CreateCardOrderDto,
+) {
+  const userId = user?.id || dto.guestId;
+  if (!userId) {
+    throw new BadRequestException('Usuário ou guestId necessário');
+  }
+  if (!user?.id) {
+    this.verifyGuest(dto.guestId, dto.signature);
+  }
+  // 🔥 CHAMA O MÉTODO QUE JÁ EXISTE NO SERVICE
+  return this.paymentsService.processCreditCardPayment(orderId, userId, dto as any);
+}
 
   @Get('card/session')
   async createCardSession() {
@@ -185,9 +202,6 @@ export class PaymentsController {
       );
     }
 
-    // Fazendo um casting de 'req' para 'any' para acessar 'rawBody'.
-    // Idealmente, você estenderia a interface 'Request' do Express em um arquivo de declaração global (.d.ts)
-    // para incluir 'rawBody' de forma type-safe.
     const rawBody = (req as any).rawBody
       ? (req as any).rawBody.toString('utf8')
       : JSON.stringify(payload);
@@ -200,7 +214,6 @@ export class PaymentsController {
     );
   }
 
-  // 🔥 NOVO ENDPOINT: Cancelar pedidos expirados (pode ser chamado manualmente ou por cron job)
   @Post('cancel-expired')
   @UseGuards(JwtAuthGuard)
   async cancelExpiredOrders() {
@@ -213,4 +226,3 @@ export class PaymentsController {
     };
   }
 }
-
