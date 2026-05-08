@@ -20,6 +20,7 @@ type OrderEmailContext = {
 export class NotificationsService {
   public readonly logger = new Logger(NotificationsService.name);
   private readonly brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
+  private readonly brandLogoUrl = 'https://www.bymkcloset.com.br/images/logo2.png';
 
   constructor(private configService: ConfigService) {
     this.logger.log('Servico de e-mail inicializado via Brevo API.');
@@ -27,16 +28,20 @@ export class NotificationsService {
 
   private buildLayout(title: string, intro: string, body: string, cta?: string) {
     return `
-      <div style="font-family:Arial,sans-serif;background:#f7f7f7;padding:24px;color:#111827;">
-        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
-          <div style="background:#111827;color:#ffffff;padding:24px 28px;">
-            <h1 style="margin:0;font-size:24px;">MK Closet</h1>
-            <p style="margin:8px 0 0;font-size:14px;opacity:.9;">${title}</p>
+      <div style="margin:0;background:#f5f2ee;padding:32px 16px;color:#111827;font-family:Arial,Helvetica,sans-serif;">
+        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #ece7df;box-shadow:0 18px 45px rgba(17,24,39,0.08);">
+          <div style="background:linear-gradient(180deg,#fbf8f3 0%,#f2ebe2 100%);padding:28px 28px 22px;border-bottom:1px solid #e8dfd4;text-align:center;">
+            <img
+              src="${this.brandLogoUrl}"
+              alt="MK Closet"
+              style="display:block;margin:0 auto 14px;max-width:180px;width:100%;height:auto;"
+            />
+            <p style="margin:0;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:#8a7663;">${title}</p>
           </div>
-          <div style="padding:28px;">
-            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${intro}</p>
+          <div style="padding:30px 28px;">
+            <p style="margin:0 0 18px;font-size:16px;line-height:1.75;color:#1f2937;">${intro}</p>
             ${body}
-            ${cta ? `<p style="margin:24px 0 0;font-size:14px;color:#374151;">${cta}</p>` : ''}
+            ${cta ? `<p style="margin:26px 0 0;font-size:14px;line-height:1.7;color:#6b7280;">${cta}</p>` : ''}
           </div>
         </div>
       </div>
