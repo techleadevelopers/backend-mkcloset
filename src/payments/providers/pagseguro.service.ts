@@ -833,5 +833,107 @@ export class PagSeguroService {
         'Falha ao iniciar reembolso com PagSeguro.',
       );
     }
+    
   }
+  async createCreditCardOrder(details: {
+  orderId: string;
+  amount: number;
+  description: string;
+  customer: { email: string; name: string; cpf: string; phone?: string };
+  items: Array<{ name: string; quantity: number; unit_amount: number }>;
+  shippingAddress: any;
+  encryptedCard: string;
+  holderName: string;
+  holderCpf: string;
+  installments: number;
+  notificationUrl: string;
+  subMerchant: {
+    referenceId: string;
+    name: string;
+    taxId: string;
+    mcc: string;
+    address: {
+      country: string;
+      regionCode: string;
+      city: string;
+      postalCode: string;
+      street: string;
+      number: string;
+      locality: string;
+    };
+    phones: Array<{ country: string; area: string; number: string; type: string }>;
+  };
+}) {
+  const payload = {
+    reference_id: details.orderId,
+    customer: {
+      name: details.customer.name,
+      email: details.customer.email,
+      tax_id: details.customer.cpf,
+      phones: details.customer.phone ? [{
+        country: '55',
+        area: details.customer.phone.substring(0, 2),
+        number: details.customer.phone.substring(2),
+        type: 'MOBILE'
+      }] : []
+    },
+    items: details.items,
+    shipping: {
+      address: {
+        country: 'BRA',
+        region_code: details.shippingAddress.state,
+        city: details.shippingAddress.city,
+        postal_code: details.shippingAddress.cep?.replace(/\D/g, '') || '',
+        street: details.shippingAddress.street,
+        number: details.shippingAddress.number,
+        locality: details.shippingAddress.neighborhood,
+        complement: details.shippingAddress.complement || undefined
+      }
+    },
+    charges: [{
+      reference_id: `charge_${details.orderId}`,
+      description: details.description,
+      amount: { value: Math.round(details.amount * 100), currency: 'BRL' },
+      payment_method: {
+        type: 'CREDIT_CARD',
+        installments: details.installments || 1,
+        capture: true,
+        card: { encrypted: details.encryptedCard },
+        holder: { name: details.holderName, tax_id: details.holderCpf }
+      },
+      sub_merchant: {
+        reference_id: details.subMerchant.referenceId,
+        name: details.subMerchant.name,
+        tax_id: details.subMerchant.taxId,
+        mcc: details.subMerchant.mcc,
+        address: {
+          country: details.subMerchant.address.country,
+          region_code: details.subMerchant.address.regionCode,
+          city: details.subMerchant.address.city,
+          postal_code: details.subMerchant.address.postalCode,
+          street: details.subMerchant.address.street,
+          number: details.subMerchant.address.number,
+          locality: details.subMerchant.address.locality
+        },
+        phones: details.subMerchant.phones
+      }
+    }],
+    notification_urls: [details.notificationUrl]
+  };
+
+  try {
+    const response = await axios.post(`${this.pagSeguroBaseApiUrl}/orders`, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.pagSeguroToken}`,
+        'x-api-version': '4.0'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    this.logger.error(`Erro ao criar pedido com cartão: ${errorMessage}`);
+    throw error;
+  }
+}
 }
