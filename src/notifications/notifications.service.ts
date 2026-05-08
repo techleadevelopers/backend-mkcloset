@@ -2,11 +2,8 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  OnModuleInit,
 } from '@nestjs/common';
-import Mail from 'nodemailer/lib/mailer';
-import * as nodemailer from 'nodemailer';
-import * as net from 'net';
+import axios from 'axios';
 import { ConfigService } from 'src/config/config.service';
 
 type OrderEmailContext = {
@@ -20,82 +17,12 @@ type OrderEmailContext = {
 };
 
 @Injectable()
-export class NotificationsService implements OnModuleInit {
+export class NotificationsService {
   public readonly logger = new Logger(NotificationsService.name);
-  private transporter: Mail;
+  private readonly brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
 
   constructor(private configService: ConfigService) {
-    // 🔥 Usa os getters do ConfigService (já mapeiam SMTP_* e EMAIL_SERVICE_*)
-    const host = this.configService.emailServiceHost;
-    const port = this.configService.emailServicePort;
-    const secure = this.configService.emailServiceSecure;
-    const user = this.configService.emailServiceUser;
-    const pass = this.configService.emailServicePass;
-    this.logger.log('Servico de e-mail inicializado.');
-    
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-      auth: {
-        user,
-        pass,
-      },
-    });
-  }
-
-  async onModuleInit(): Promise<void> {
-    const host = this.configService.emailServiceHost;
-    if (!host) {
-      return;
-    }
-
-    await Promise.all([
-      this.testTcpConnectivity(host, 587),
-      this.testTcpConnectivity(host, 465),
-    ]);
-
-    try {
-      await this.transporter.verify();
-      this.logger.log('SMTP verify concluido com sucesso.');
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`SMTP verify falhou: ${err.message}`, err.stack);
-    }
-  }
-
-  private async testTcpConnectivity(
-    host: string,
-    port: number,
-  ): Promise<void> {
-    await new Promise<void>((resolve) => {
-      const socket = net.createConnection({ host, port });
-      const startedAt = Date.now();
-
-      socket.setTimeout(8000);
-
-      socket.on('connect', () => {
-        this.logger.log(
-          `SMTP TCP OK ${host}:${port} em ${Date.now() - startedAt}ms`,
-        );
-        socket.end();
-        resolve();
-      });
-
-      socket.on('timeout', () => {
-        this.logger.warn(`SMTP TCP TIMEOUT ${host}:${port}`);
-        socket.destroy();
-        resolve();
-      });
-
-      socket.on('error', (error: Error) => {
-        this.logger.warn(`SMTP TCP ERROR ${host}:${port} - ${error.message}`);
-        resolve();
-      });
-    });
+    this.logger.log('Servico de e-mail inicializado via Brevo API.');
   }
 
   private buildLayout(title: string, intro: string, body: string, cta?: string) {
@@ -131,30 +58,59 @@ export class NotificationsService implements OnModuleInit {
     html: string,
     text?: string,
   ): Promise<void> {
-    if (!this.configService.emailServiceHost) {
-      this.logger.warn(`SMTP desativado: SMTP_HOST não configurado. Ignorando envio para ${to}.`);
+    const apiKey = this.configService.emailServicePass;
+    const fromEmail = this.configService.emailServiceFrom;
+
+    if (!apiKey) {
+      this.logger.warn(`Brevo API desativada: chave nao configurada. Ignorando envio para ${to}.`);
       return;
     }
-    if (!this.configService.emailServiceUser || !this.configService.emailServicePass) {
-      this.logger.warn(`SMTP desativado: credenciais não configuradas. Ignorando envio para ${to}.`);
+
+    if (!fromEmail) {
+      this.logger.warn(`Brevo API desativada: remetente nao configurado. Ignorando envio para ${to}.`);
       return;
     }
 
     try {
-      await this.transporter.sendMail({
-        from: this.configService.emailServiceFrom,
-        to,
+      const payload = {
+        sender: {
+          name: 'MK Closet',
+          email: fromEmail,
+        },
+        to: [
+          {
+            email: to,
+          },
+        ],
         subject,
-        html,
-        text: text || html.replace(/<[^>]*>/g, ' '),
+        htmlContent: html,
+        textContent: text || html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+      };
+
+      const response = await axios.post(this.brevoApiUrl, payload, {
+        headers: {
+          'api-key': apiKey,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        timeout: 15000,
       });
-      this.logger.log(`E-mail enviado com sucesso para ${to}. Assunto: ${subject}`);
+
+      this.logger.log(
+        `E-mail enviado com sucesso para ${to}. Assunto: ${subject}. MessageId: ${response.data?.messageId ?? 'n/a'}`,
+      );
     } catch (error) {
       const err = error as Error;
-      this.logger.error(
-        `Falha ao enviar e-mail para ${to}. Assunto: ${subject}. Erro: ${err.message}`,
-        err.stack,
-      );
+      if (axios.isAxiosError(error) && error.response) {
+        this.logger.error(
+          `Falha ao enviar e-mail para ${to}. Assunto: ${subject}. Brevo: ${JSON.stringify(error.response.data)}`,
+        );
+      } else {
+        this.logger.error(
+          `Falha ao enviar e-mail para ${to}. Assunto: ${subject}. Erro: ${err.message}`,
+          err.stack,
+        );
+      }
       throw new InternalServerErrorException('Falha ao enviar e-mail de notificação.');
     }
   }
