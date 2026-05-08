@@ -6,6 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { CreateCardOrderDto } from './dto/create-card-order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { OrdersService } from 'src/orders/orders.service';
 import {
@@ -223,17 +224,73 @@ export class PaymentsService {
   }
 
   async processCreditCardPayment(
-    orderId: string,
-    userId: string | undefined,
-    processPaymentDto: ProcessPaymentDto,
-  ): Promise<any> {
-    void orderId;
-    void userId;
-    void processPaymentDto;
-    throw new BadRequestException(
-      'Fluxo direto de cartao desativado. Use o checkout hospedado do PagBank.',
-    );
+  orderId: string,
+  userId: string | undefined,
+  processPaymentDto: ProcessPaymentDto,
+): Promise<any> {
+  const order = await this.getPayableOrder(orderId, userId);
+  const backendUrl = this.requireBackendUrl();
+
+  const subMerchant = {
+    referenceId: 'MKCLOSET_001',
+    name: 'MK CLOSET LTDA',
+    taxId: '42167200803',
+    mcc: '5311',
+    address: {
+      country: 'BRA',
+      regionCode: 'SP',
+      city: 'Campinas',
+      postalCode: '13033035',
+      street: 'Rua Raul Seixas',
+      number: '52',
+      locality: 'Jardim Aurelia'
+    },
+    phones: [{
+      country: '55',
+      area: '19',
+      number: '993627366',
+      type: 'MOBILE'
+    }]
+  };
+
+  const response = await this.pagSeguroService.createCreditCardOrder({
+    orderId: order.id,
+    amount: order.totalAmount.toNumber(),
+    description: `Pedido #${order.id}`,
+    customer: {
+      email: order.user?.email ?? order.guestEmail ?? '',
+      name: order.user?.name ?? order.guestName ?? 'Cliente',
+      cpf: order.user?.cpf ?? order.guestCpf ?? '',
+      phone: order.user?.phone ?? order.guestPhone ?? undefined
+    },
+    items: order.items.map(item => ({
+      name: item.product.name,
+      quantity: item.quantity,
+      unit_amount: item.price.toNumber() * 100
+    })),
+    shippingAddress: {
+      cep: order.shippingAddressZipCode,
+      street: order.shippingAddressStreet,
+      number: order.shippingAddressNumber,
+      complement: order.shippingAddressComplement,
+      neighborhood: order.shippingAddressNeighborhood,
+      city: order.shippingAddressCity,
+      state: order.shippingAddressState
+    },
+    encryptedCard: (processPaymentDto as any).encryptedCard,
+    holderName: (processPaymentDto as any).holderName,
+    holderCpf: (processPaymentDto as any).holderCpf,
+    installments: (processPaymentDto as any).installments || 1,
+    notificationUrl: `${backendUrl}/payments/webhook/pagseguro`,
+    subMerchant
+  });
+
+  if (response.charges?.[0]?.status === 'PAID') {
+    await this.markOrderPaid(order);
   }
+
+  return response;
+}
 
   async initiatePagSeguroRedirectCheckout(
     userId: string | undefined,
