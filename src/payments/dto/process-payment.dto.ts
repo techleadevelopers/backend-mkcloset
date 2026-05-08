@@ -24,7 +24,7 @@ export class ProcessPaymentDto {
     message:
       'paymentMethod deve ser um dos seguintes valores: PIX, CREDIT_CARD, BOLETO',
   })
-  paymentMethod: PaymentMethod;
+  paymentMethod!: PaymentMethod;  // 🔥 ÚNICA MUDANÇA: adicionado "!"
 
   @ApiPropertyOptional({ example: '123.456.789-00' })
   @IsOptional()
