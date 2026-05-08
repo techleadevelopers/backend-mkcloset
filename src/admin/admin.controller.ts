@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { OrderStatus, Role } from '@prisma/client';
+import { Type } from 'class-transformer';
+import { IsEmail, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 import { AntifraudStatus } from 'src/antifraud/antifraud.service';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -25,19 +27,50 @@ class UpdateOrderStatusDto {
 }
 
 class SendTestEmailDto {
+  @IsEmail()
   to: string;
+
+  @IsIn([
+    'ORDER_CREATED',
+    'PAYMENT_APPROVED',
+    'ORDER_PROCESSING',
+    'ORDER_SHIPPED',
+    'ORDER_DELIVERED',
+  ])
   template:
     | 'ORDER_CREATED'
     | 'PAYMENT_APPROVED'
     | 'ORDER_PROCESSING'
     | 'ORDER_SHIPPED'
     | 'ORDER_DELIVERED';
+
+  @IsOptional()
+  @IsString()
   customerName?: string;
+
+  @IsOptional()
+  @IsString()
   orderId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
   totalAmount?: number;
+
+  @IsOptional()
+  @IsString()
   carrier?: string;
+
+  @IsOptional()
+  @IsString()
   postedAt?: string;
+
+  @IsOptional()
+  @IsString()
   trackingCode?: string;
+
+  @IsOptional()
+  @IsString()
   trackingUrl?: string;
 }
 
