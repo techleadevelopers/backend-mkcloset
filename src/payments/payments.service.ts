@@ -1070,6 +1070,14 @@ private async updatePaymentIntent(
     for (const intent of expiredIntents) {
       try {
         await this.prisma.$transaction(async (prisma) => {
+          const validUser = intent.userId
+            ? await prisma.user.findUnique({
+                where: { id: intent.userId },
+                select: { id: true },
+              })
+            : null;
+          const transactionUserId = validUser?.id ?? null;
+
           await prisma.$executeRaw`
             UPDATE "PaymentIntent"
             SET status = 'EXPIRED'::"PaymentIntentStatus",
@@ -1086,14 +1094,14 @@ private async updatePaymentIntent(
             where: { orderId: intent.orderId },
             create: {
               orderId: intent.orderId,
-              userId: intent.userId,
+              userId: transactionUserId,
               amount: intent.amount,
               type: TransactionType.REFUND,
               status: 'EXPIRED',
               description: `Pedido cancelado automaticamente apos ${PAYMENT_INTENT_EXPIRATION_MINUTES} minutos sem pagamento`,
             },
             update: {
-              userId: intent.userId,
+              userId: transactionUserId,
               amount: intent.amount,
               type: TransactionType.REFUND,
               status: 'EXPIRED',
