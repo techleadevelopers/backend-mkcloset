@@ -340,7 +340,13 @@ export class PagSeguroService {
       );
 
       const publicKey =
-        response.data?.public_key ?? response.data?.publicKey ?? '';
+        response.data?.public_key ??
+        response.data?.publicKey ??
+        response.data?.data?.public_key ??
+        response.data?.data?.publicKey ??
+        response.data?.public_keys?.[0]?.public_key ??
+        response.data?.publicKeys?.[0]?.publicKey ??
+        '';
       if (!publicKey) {
         throw new InternalServerErrorException(
           'Resposta invÃƒÂ¡lida do PagSeguro: public key ausente.',
@@ -533,6 +539,7 @@ export class PagSeguroService {
       '4014': 'SEDEX',
       '41106': 'PAC',
       FIXED: 'FIXED',
+      TEST_PIX_FREE: 'FIXED',
     };
     const pagSeguroShippingService =
       shippingServiceMap[details.shippingService] || details.shippingService;
