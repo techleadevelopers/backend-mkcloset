@@ -45,6 +45,9 @@ interface OrderItemData {
   color: string | null;
 }
 
+const TEST_PIX_PRODUCT_PREFIX = '[TESTE PIX]';
+const TEST_PIX_SHIPPING_SERVICE = 'TEST_PIX_FREE';
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -141,6 +144,19 @@ export class OrdersService {
     });
   }
 
+  private isTestPixOnlyCart(
+    cartItems: Array<{ product?: { name?: string | null } }>,
+  ) {
+    return cartItems.length > 0
+      ? cartItems.every((item) =>
+          (item.product?.name ?? '')
+            .trim()
+            .toUpperCase()
+            .startsWith(TEST_PIX_PRODUCT_PREFIX),
+        )
+      : false;
+  }
+
   /**
    * Busca um pedido pelo seu ID único.
    * Este método é crucial para o PaymentsService, pois ele precisa dos dados do cliente (logado ou convidado).
@@ -210,6 +226,8 @@ export class OrdersService {
     if (!cart.items || cart.items.length === 0) {
       throw new BadRequestException('O carrinho está vazio.');
     }
+
+    const isTestPixOrder = this.isTestPixOnlyCart(cart.items);
 
     // 2. Verificar estoque e preço atualizado dos produtos
     let totalAmount = new Prisma.Decimal(0);
@@ -311,29 +329,52 @@ export class OrdersService {
     }
 
     // 4. Recalcular o frete no backend para não confiar no valor enviado pelo frontend
-    const shippingZipCode = finalShippingAddressData.zipCode;
-    const shippingCalculation = await this.shippingService.calculateShipping({
-      zipCode: shippingZipCode,
-      items: this.buildShippingItemsFromCart(cart.items),
-    });
+    let resolvedShippingService = shippingService;
+    let parsedShippingPrice: Prisma.Decimal;
 
-    const selectedShippingOption = shippingCalculation.options.find(
-      (option) => option.service === shippingService,
-    );
+    if (isTestPixOrder) {
+      if (
+        shippingService &&
+        shippingService !== TEST_PIX_SHIPPING_SERVICE
+      ) {
+        throw new BadRequestException(
+          'Esse produto de teste deve usar o frete interno de homologação.',
+        );
+      }
 
-    if (!selectedShippingOption) {
-      throw new BadRequestException(
-        'A opção de frete selecionada não é válida para este CEP.',
+      if (Number(shippingPrice) !== 0) {
+        throw new BadRequestException(
+          'Produto de teste Pix deve ser finalizado com frete zerado.',
+        );
+      }
+
+      resolvedShippingService = TEST_PIX_SHIPPING_SERVICE;
+      parsedShippingPrice = new Prisma.Decimal(0);
+    } else {
+      const shippingZipCode = finalShippingAddressData.zipCode;
+      const shippingCalculation = await this.shippingService.calculateShipping({
+        zipCode: shippingZipCode,
+        items: this.buildShippingItemsFromCart(cart.items),
+      });
+
+      const selectedShippingOption = shippingCalculation.options.find(
+        (option) => option.service === shippingService,
       );
-    }
 
-    if (Math.abs(selectedShippingOption.price - shippingPrice) > 0.01) {
-      throw new BadRequestException(
-        'O valor do frete foi atualizado. Recalcule o frete antes de finalizar o pedido.',
-      );
-    }
+      if (!selectedShippingOption) {
+        throw new BadRequestException(
+          'A opção de frete selecionada não é válida para este CEP.',
+        );
+      }
 
-    const parsedShippingPrice = new Prisma.Decimal(selectedShippingOption.price);
+      if (Math.abs(selectedShippingOption.price - shippingPrice) > 0.01) {
+        throw new BadRequestException(
+          'O valor do frete foi atualizado. Recalcule o frete antes de finalizar o pedido.',
+        );
+      }
+
+      parsedShippingPrice = new Prisma.Decimal(selectedShippingOption.price);
+    }
 
     // 5. Criar o pedido na transação
     const order = await this.prisma.$transaction(async (prisma) => {
@@ -353,7 +394,7 @@ export class OrdersService {
           shippingPrice: parsedShippingPrice,
           paymentMethod, // O paymentMethod do CreateOrderDto será salvo aqui
           paymentDetails: createOrderDto.paymentDetails || {},
-          shippingService: shippingService,
+          shippingService: resolvedShippingService,
 
           // Dados do endereço de entrega final
           shippingAddressStreet: finalShippingAddressData.street,
