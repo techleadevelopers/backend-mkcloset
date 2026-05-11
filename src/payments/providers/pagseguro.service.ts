@@ -34,7 +34,7 @@ type CardGatewayResponse = {
 
 // Interface para os detalhes de um item no checkout do PagSeguro
 interface PagSeguroCheckoutItem {
-  reference_id?: string; // ID de referÃªncia do item (opcional)
+  reference_id?: string; // ID de referência do item (opcional)
   name: string;
   quantity: number;
   unit_amount: number; // Valor em centavos
@@ -53,7 +53,7 @@ interface PagSeguroCheckoutCustomer {
   }>;
 }
 
-// Interface para o endereÃ§o no checkout do PagSeguro
+// Interface para o endereço no checkout do PagSeguro
 interface PagSeguroCheckoutAddress {
   country: string;
   region_code: string; // Estado (ex: SP)
@@ -69,13 +69,13 @@ interface PagSeguroCheckoutAddress {
 interface PagSeguroCheckoutShipping {
   address: PagSeguroCheckoutAddress;
   type: 'FIXED' | 'FREE' | 'WEIGHT'; // Tipo de frete
-  service_type: string; // ServiÃ§o de frete (ex: SEDEX, PAC)
+  service_type: string; // Serviço de frete (ex: SEDEX, PAC)
   amount: number; // Custo do frete em centavos
   estimated_delivery_time_in_days?: number;
-  address_modifiable?: boolean; // Se o cliente pode modificar o endereÃ§o na pÃ¡gina do PagSeguro
+  address_modifiable?: boolean; // Se o cliente pode modificar o endereço na página do PagSeguro
 }
 
-// Interface para os detalhes necessÃ¡rios para criar um checkout de redirecionamento
+// Interface para os detalhes necessários para criar um checkout de redirecionamento
 interface CreatePagSeguroCheckoutRedirectDetails {
   orderId: string; // Seu ID de pedido interno, usado como reference_id
   amount: Prisma.Decimal; // Valor total do pedido, incluindo frete
@@ -100,7 +100,7 @@ interface CreatePagSeguroCheckoutRedirectDetails {
   items: Array<{
     name: string;
     quantity: number;
-    unit_amount: Prisma.Decimal; // PreÃ§o unitÃ¡rio do item
+    unit_amount: Prisma.Decimal; // Preço unitário do item
   }>;
   checkoutOptions?: {
     paymentMethods?: Array<'CREDIT_CARD' | 'DEBIT_CARD' | 'PIX' | 'BOLETO'>;
@@ -111,7 +111,7 @@ interface CreatePagSeguroCheckoutRedirectDetails {
   };
 }
 
-// Interface para os detalhes necessÃ¡rios para criar uma cobranÃ§a PIX
+// Interface para os detalhes necessários para criar uma cobrança PIX
 interface CreatePagSeguroPixChargeDetails {
   orderId: string;
   amount: Prisma.Decimal;
@@ -140,7 +140,7 @@ interface CreatePagSeguroPixChargeDetails {
   }>;
 }
 
-// NOVO: Interface para os detalhes necessÃ¡rios para processar pagamento direto com cartÃ£o
+// NOVO: Interface para os detalhes necessários para processar pagamento direto com cartão
 interface CreatePagSeguroCreditCardChargeDetails {
   orderId: string;
   amount: Prisma.Decimal;
@@ -180,7 +180,7 @@ export class PagSeguroService {
   private readonly logger = new Logger(PagSeguroService.name);
   private pagSeguroBaseApiUrl: string; // URL base da API (sem /checkouts)
   private pagSeguroToken: string;
-  private pagSeguroEmail: string; // Email da conta PagSeguro, se necessÃ¡rio para alguma API
+  private pagSeguroEmail: string; // Email da conta PagSeguro, se necessário para alguma API
   private redirectBaseUrl: string; // URL base do frontend (ngrok)
   private readonly isSandbox: boolean;
 
@@ -283,20 +283,20 @@ export class PagSeguroService {
     this.pagSeguroToken = this.configService.get<string>(
       'PAGSEGURO_API_TOKEN',
     )!;
-    this.pagSeguroEmail = this.configService.get<string>('PAGSEGURO_EMAIL')!; // Pode ser necessÃ¡rio para APIs mais antigas ou especÃ­ficas
+    this.pagSeguroEmail = this.configService.get<string>('PAGSEGURO_EMAIL')!; // Pode ser necessário para APIs mais antigas ou especÃ­ficas
 
     // Carrega as URLs do ngrok do .env
     this.redirectBaseUrl = this.configService.get<string>('FRONTEND_URL')!; // Usando FRONTEND_URL
     this.isSandbox = this.pagSeguroBaseApiUrl.includes('sandbox');
     // REMOVIDO: this.notificationBaseUrl = this.configService.get<string>('BACKEND_URL')!;
 
-    // ValidaÃ§Ã£o de configuraÃ§Ã£o
+    // Validação de configuração
     if (!this.pagSeguroToken || !this.redirectBaseUrl) {
       this.logger.error(
-        'Credenciais e/ou URLs do PagSeguro nÃ£o configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL no seu .env.',
+        'Credenciais e/ou URLs do PagSeguro não configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL no seu .env.',
       );
       throw new InternalServerErrorException(
-        'Credenciais e/ou URLs do PagSeguro nÃ£o configuradas.',
+        'Credenciais e/ou URLs do PagSeguro não configuradas.',
       );
     }
   }
@@ -307,18 +307,18 @@ export class PagSeguroService {
     try {
       const response = await axios.post(sessionUrl);
       this.logger.log(
-        `[PagSeguroService] SessÃ£o PagSeguro criada: ${JSON.stringify(response.data)}`,
+        `[PagSeguroService] Sessão PagSeguro criada: ${JSON.stringify(response.data)}`,
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Erro ao criar sessÃ£o no PagSeguro:', this.getErrorMessage(error));
+      this.logger.error('Erro ao criar sessão no PagSeguro:', this.getErrorMessage(error));
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
-          `[PagSeguroService] Dados do erro da API PagSeguro (sessÃ£o): ${JSON.stringify(error.response.data)}`,
+          `[PagSeguroService] Dados do erro da API PagSeguro (sessão): ${JSON.stringify(error.response.data)}`,
         );
       }
       throw new InternalServerErrorException(
-        'Falha ao criar sessÃ£o no PagSeguro.',
+        'Falha ao criar sessão no PagSeguro.',
       );
     }
   }
@@ -709,7 +709,7 @@ export class PagSeguroService {
         error.response.status === 404
       ) {
         throw new NotFoundException(
-          `Checkout PagSeguro com ID "${pagSeguroCheckoutId}" nÃ£o encontrado.`,
+          `Checkout PagSeguro com ID "${pagSeguroCheckoutId}" não encontrado.`,
         );
       }
       throw new InternalServerErrorException(
@@ -786,7 +786,7 @@ export class PagSeguroService {
         error.response.status === 404
       ) {
         throw new NotFoundException(
-          `Pedido PagSeguro com ID "${orderId}" nÃ£o encontrado.`,
+          `Pedido PagSeguro com ID "${orderId}" não encontrado.`,
         );
       }
       throw new InternalServerErrorException(
@@ -795,10 +795,10 @@ export class PagSeguroService {
     }
   }
 
-  // NOVO: MÃ©todo para iniciar um reembolso
+  // NOVO: Método para iniciar um reembolso
   async initiateRefund(transactionId: string, amount?: number): Promise<any> {
     this.logger.log(
-      `[PagSeguroService] Iniciando reembolso para a transaÃ§Ã£o ${transactionId}, valor: ${amount || 'total'}`,
+      `[PagSeguroService] Iniciando reembolso para a transação ${transactionId}, valor: ${amount || 'total'}`,
     );
 
     const refundUrl = `${this.pagSeguroBaseApiUrl}/charges/${transactionId}/cancel`;
@@ -817,12 +817,12 @@ export class PagSeguroService {
         },
       });
       this.logger.log(
-        `[PagSeguroService] Reembolso iniciado com sucesso para transaÃ§Ã£o ${transactionId}.`,
+        `[PagSeguroService] Reembolso iniciado com sucesso para transação ${transactionId}.`,
       );
       return response.data;
     } catch (error) {
       this.logger.error(
-        `[PagSeguroService] Erro ao iniciar reembolso para transaÃ§Ã£o ${transactionId}: ${this.getErrorMessage(error)}`,
+        `[PagSeguroService] Erro ao iniciar reembolso para transação ${transactionId}: ${this.getErrorMessage(error)}`,
       );
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(
