@@ -112,7 +112,7 @@ export class PaymentsService {
 
     if (existingIntent) {
       this.logger.debug(
-        `Intent PIX jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
+        `Intent PIX já existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
       if (
         existingIntent.externalOrderId &&
@@ -304,7 +304,7 @@ export class PaymentsService {
 
     if (existingIntent) {
       this.logger.debug(
-        `Intent de checkout redirecionado jÃ¡ existe para o pedido ${order.id}. Reutilizando recurso existente.`,
+        `Intent de checkout redirecionado já existe para o pedido ${order.id}. Reutilizando recurso existente.`,
       );
       return this.buildRedirectResponseFromIntent(existingIntent);
     }
@@ -510,7 +510,7 @@ export class PaymentsService {
 
     if (order.status !== OrderStatus.PENDING) {
       throw new BadRequestException(
-        'O pedido jÃ¡ foi pago ou estÃ¡ em outro status.',
+        'O pedido já foi pago ou está em outro status.',
       );
     }
 
@@ -636,14 +636,20 @@ export class PaymentsService {
       payload?.payment_id,
       payload?.charge_id,
       payload?.reference_id,
+      payload?.charges?.[0]?.id,
+      payload?.charges?.[0]?.reference_id,
       payload?.payment?.id,
       payload?.payment?.checkout_id,
       payload?.payment?.order_id,
       payload?.payment?.reference_id,
+      payload?.payment?.charges?.[0]?.id,
+      payload?.payment?.charges?.[0]?.reference_id,
       payload?.data?.id,
       payload?.data?.checkout_id,
       payload?.data?.order_id,
       payload?.data?.reference_id,
+      payload?.data?.charges?.[0]?.id,
+      payload?.data?.charges?.[0]?.reference_id,
     ];
 
     return Array.from(
@@ -668,6 +674,8 @@ export class PaymentsService {
       Prisma.sql`"externalOrderId" = ${identifier}`,
       Prisma.sql`"externalChargeId" = ${identifier}`,
       Prisma.sql`"orderId" = ${identifier}`,
+      Prisma.sql`"referenceId" = ${identifier}`,
+      Prisma.sql`"transactionRef" = ${identifier}`,
     ]);
 
     if (conditions.length === 0) {
