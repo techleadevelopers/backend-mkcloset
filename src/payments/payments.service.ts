@@ -230,6 +230,13 @@ export class PaymentsService {
 ): Promise<any> {
   const order = await this.getPayableOrder(orderId, userId);
   const backendUrl = this.requireBackendUrl();
+  const intent = await this.claimPaymentIntent({
+    order,
+    userId,
+    gateway: 'PAGSEGURO_CARD',
+    description: `Pagamento cartao para Pedido #${order.id}`,
+    metadata: { paymentMethod: 'CREDIT_CARD' },
+  });
 
   const subMerchant = {
     referenceId: 'MKCLOSET_001',
@@ -253,43 +260,73 @@ export class PaymentsService {
     }]
   };
 
-  const response = await this.pagSeguroService.createCreditCardOrder({
-    orderId: order.id,
-    amount: order.totalAmount.toNumber(),
-    description: `Pedido #${order.id}`,
-    customer: {
-      email: order.user?.email ?? order.guestEmail ?? '',
-      name: order.user?.name ?? order.guestName ?? 'Cliente',
-      cpf: order.user?.cpf ?? order.guestCpf ?? '',
-      phone: order.user?.phone ?? order.guestPhone ?? undefined
-    },
-    items: order.items.map(item => ({
-      name: item.product.name,
-      quantity: item.quantity,
-      unit_amount: item.price.toNumber() * 100
-    })),
-    shippingAddress: {
-      cep: order.shippingAddressZipCode,
-      street: order.shippingAddressStreet,
-      number: order.shippingAddressNumber,
-      complement: order.shippingAddressComplement,
-      neighborhood: order.shippingAddressNeighborhood,
-      city: order.shippingAddressCity,
-      state: order.shippingAddressState
-    },
-    encryptedCard: (processPaymentDto as any).encryptedCard,
-    holderName: (processPaymentDto as any).holderName,
-    holderCpf: (processPaymentDto as any).holderCpf,
-    installments: (processPaymentDto as any).installments || 1,
-    notificationUrl: `${backendUrl}/payments/webhook/pagseguro`,
-    subMerchant
-  });
+  try {
+    const response = await this.pagSeguroService.createCreditCardOrder({
+      orderId: order.id,
+      amount: order.totalAmount.toNumber(),
+      description: `Pedido #${order.id}`,
+      customer: {
+        email: order.user?.email ?? order.guestEmail ?? '',
+        name: order.user?.name ?? order.guestName ?? 'Cliente',
+        cpf: order.user?.cpf ?? order.guestCpf ?? '',
+        phone: order.user?.phone ?? order.guestPhone ?? undefined
+      },
+      items: order.items.map(item => ({
+        name: item.product.name,
+        quantity: item.quantity,
+        unit_amount: item.price.toNumber() * 100
+      })),
+      shippingAddress: {
+        cep: order.shippingAddressZipCode,
+        street: order.shippingAddressStreet,
+        number: order.shippingAddressNumber,
+        complement: order.shippingAddressComplement,
+        neighborhood: order.shippingAddressNeighborhood,
+        city: order.shippingAddressCity,
+        state: order.shippingAddressState
+      },
+      encryptedCard: (processPaymentDto as any).encryptedCard,
+      holderName: (processPaymentDto as any).holderName,
+      holderCpf: (processPaymentDto as any).holderCpf,
+      installments: (processPaymentDto as any).installments || 1,
+      notificationUrl: `${backendUrl}/payments/webhook/pagseguro`,
+      subMerchant
+    });
 
-  if (response.charges?.[0]?.status === 'PAID') {
-    await this.markOrderPaid(order);
+    const providerStatus = this.extractProviderStatus(response, response);
+    const desiredState = this.mapExternalStatusToIntentStatus(providerStatus);
+    const updatedIntent = await this.updatePaymentIntent(intent.id, {
+      status: desiredState,
+      externalOrderId: response?.id ?? intent.externalOrderId ?? null,
+      externalChargeId: response?.charges?.[0]?.id ?? null,
+      transactionRef:
+        response?.charges?.[0]?.reference_id ??
+        response?.charges?.[0]?.payment_response?.reference ??
+        response?.id ??
+        null,
+      metadata: {
+        ...(intent.metadata as object | null),
+        providerStatus,
+      },
+    });
+
+    await this.syncTransactionFromIntent(order, updatedIntent);
+
+    if (updatedIntent.status === 'CONFIRMED') {
+      await this.markOrderPaid(order);
+    }
+
+    return response;
+  } catch (error) {
+    await this.updatePaymentIntent(intent.id, {
+      status: 'FAILED',
+      metadata: {
+        ...(intent.metadata as object | null),
+        error: (error as Error).message,
+      },
+    });
+    throw error;
   }
-
-  return response;
 }
 
   async initiatePagSeguroRedirectCheckout(
