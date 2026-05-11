@@ -60,15 +60,25 @@ export class PaymentsController {
   private extractWebhookIdentifier(payload: any): string | null {
     const candidates = [
       payload?.id,
+      payload?.reference_id,
       payload?.checkout_id,
       payload?.order_id,
       payload?.payment_id,
       payload?.charge_id,
+      payload?.charges?.[0]?.id,
+      payload?.charges?.[0]?.reference_id,
       payload?.payment?.id,
+      payload?.payment?.reference_id,
       payload?.payment?.checkout_id,
       payload?.payment?.order_id,
+      payload?.payment?.charges?.[0]?.id,
+      payload?.payment?.charges?.[0]?.reference_id,
       payload?.data?.id,
+      payload?.data?.reference_id,
       payload?.data?.checkout_id,
+      payload?.data?.order_id,
+      payload?.data?.charges?.[0]?.id,
+      payload?.data?.charges?.[0]?.reference_id,
     ];
 
     for (const value of candidates) {
