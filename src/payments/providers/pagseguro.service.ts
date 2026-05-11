@@ -871,17 +871,32 @@ export class PagSeguroService {
     phones: Array<{ country: string; area: string; number: string; type: string }>;
   };
 }) {
+  const finalCustomerPhone = details.customer.phone
+    ? this.resolveCustomerPhone(
+        details.customer.phone,
+        `cartao do pedido ${details.orderId}`,
+      )
+    : null;
+  const finalCustomerTaxId = this.resolveCustomerTaxId(
+    details.customer.cpf,
+    `cartao do pedido ${details.orderId}`,
+  );
+  const finalHolderTaxId = this.resolveCustomerTaxId(
+    details.holderCpf,
+    `portador do cartao do pedido ${details.orderId}`,
+  );
+
   const payload = {
     reference_id: details.orderId,
     customer: {
       name: details.customer.name,
       email: details.customer.email,
-      tax_id: details.customer.cpf,
-      phones: details.customer.phone ? [{
+      tax_id: finalCustomerTaxId,
+      phones: finalCustomerPhone ? [{
         country: '55',
-        area: details.customer.phone.substring(0, 2),
-        number: details.customer.phone.substring(2),
-        type: 'MOBILE'
+        area: finalCustomerPhone.area,
+        number: finalCustomerPhone.number,
+        type: finalCustomerPhone.type
       }] : []
     },
     items: details.items,
@@ -905,8 +920,8 @@ export class PagSeguroService {
         type: 'CREDIT_CARD',
         installments: details.installments || 1,
         capture: true,
-        card: { encrypted: details.encryptedCard },
-        holder: { name: details.holderName, tax_id: details.holderCpf }
+        card: { encrypted: details.encryptedCard, store: false },
+        holder: { name: details.holderName, tax_id: finalHolderTaxId }
       },
       sub_merchant: {
         reference_id: details.subMerchant.referenceId,
@@ -940,6 +955,11 @@ export class PagSeguroService {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     this.logger.error(`Erro ao criar pedido com cartão: ${errorMessage}`);
+    if (axios.isAxiosError(error) && error.response) {
+      this.logger.error(
+        `[PagSeguroService] Dados do erro da API PagSeguro (cartao): ${JSON.stringify(error.response.data)}`,
+      );
+    }
     throw error;
   }
 }
