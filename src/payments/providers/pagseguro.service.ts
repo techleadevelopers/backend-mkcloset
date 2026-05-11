@@ -922,22 +922,6 @@ export class PagSeguroService {
         capture: true,
         card: { encrypted: details.encryptedCard, store: false },
         holder: { name: details.holderName, tax_id: finalHolderTaxId }
-      },
-      sub_merchant: {
-        reference_id: details.subMerchant.referenceId,
-        name: details.subMerchant.name,
-        tax_id: details.subMerchant.taxId,
-        mcc: details.subMerchant.mcc,
-        address: {
-          country: details.subMerchant.address.country,
-          region_code: details.subMerchant.address.regionCode,
-          city: details.subMerchant.address.city,
-          postal_code: details.subMerchant.address.postalCode,
-          street: details.subMerchant.address.street,
-          number: details.subMerchant.address.number,
-          locality: details.subMerchant.address.locality
-        },
-        phones: details.subMerchant.phones
       }
     }],
     notification_urls: [details.notificationUrl]
