@@ -47,6 +47,7 @@ interface OrderItemData {
 
 const TEST_PIX_PRODUCT_PREFIX = '[TESTE PIX]';
 const TEST_PIX_SHIPPING_SERVICE = 'TEST_PIX_FREE';
+const TEST_PIX_SHIPPING_PRICE = 0.5;
 
 @Injectable()
 export class OrdersService {
@@ -342,14 +343,14 @@ export class OrdersService {
         );
       }
 
-      if (Number(shippingPrice) !== 0) {
+      if (Math.abs(Number(shippingPrice) - TEST_PIX_SHIPPING_PRICE) > 0.01) {
         throw new BadRequestException(
-          'Produto de teste Pix deve ser finalizado com frete zerado.',
+          'Produto de teste Pix deve ser finalizado com frete fixo de R$ 0,50.',
         );
       }
 
       resolvedShippingService = TEST_PIX_SHIPPING_SERVICE;
-      parsedShippingPrice = new Prisma.Decimal(0);
+      parsedShippingPrice = new Prisma.Decimal(TEST_PIX_SHIPPING_PRICE);
     } else {
       const shippingZipCode = finalShippingAddressData.zipCode;
       const shippingCalculation = await this.shippingService.calculateShipping({
