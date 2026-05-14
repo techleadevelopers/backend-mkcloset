@@ -377,6 +377,36 @@ export class OrdersService {
     }
 
     // 5. Criar o pedido na transação
+    const customerProfile = finalUserId
+      ? await this.usersService.findOne(finalUserId)
+      : null;
+    const paymentDetailsSnapshot =
+      createOrderDto.paymentDetails &&
+      typeof createOrderDto.paymentDetails === 'object' &&
+      !Array.isArray(createOrderDto.paymentDetails)
+        ? { ...createOrderDto.paymentDetails }
+        : {};
+
+    paymentDetailsSnapshot.customer = {
+      ...((paymentDetailsSnapshot.customer as Record<string, unknown>) || {}),
+      name: customerProfile?.name || guestContactInfo?.name || null,
+      email: customerProfile?.email || guestContactInfo?.email || null,
+      phone: customerProfile?.phone || guestContactInfo?.phone || null,
+      cpf: customerProfile?.cpf || guestContactInfo?.cpf || null,
+    };
+
+    paymentDetailsSnapshot.shippingAddress = {
+      ...((paymentDetailsSnapshot.shippingAddress as Record<string, unknown>) || {}),
+      street: finalShippingAddressData.street,
+      number: finalShippingAddressData.number,
+      complement: finalShippingAddressData.complement ?? null,
+      neighborhood: finalShippingAddressData.neighborhood,
+      city: finalShippingAddressData.city,
+      state: finalShippingAddressData.state,
+      zipCode: finalShippingAddressData.zipCode,
+      cep: finalShippingAddressData.zipCode,
+    };
+
     const order = await this.prisma.$transaction(async (prisma) => {
       // Criar o pedido
       const newOrder = await prisma.order.create({
@@ -393,7 +423,8 @@ export class OrdersService {
           totalAmount: totalAmount.plus(parsedShippingPrice),
           shippingPrice: parsedShippingPrice,
           paymentMethod, // O paymentMethod do CreateOrderDto será salvo aqui
-          paymentDetails: createOrderDto.paymentDetails || {},
+          paymentDetails:
+            paymentDetailsSnapshot as unknown as Prisma.InputJsonValue,
           shippingService: resolvedShippingService,
 
           // Dados do endereço de entrega final
@@ -430,9 +461,6 @@ export class OrdersService {
       return newOrder;
     });
 
-    const customerProfile = finalUserId
-      ? await this.usersService.findOne(finalUserId)
-      : null;
     const recipientEmail = customerProfile?.email || guestContactInfo?.email;
     const customerName = customerProfile?.name || guestContactInfo?.name;
 
