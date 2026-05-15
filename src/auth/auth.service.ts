@@ -1,16 +1,19 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { UsersService } from 'src/users/users.service';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { RegisterUserDto } from './dto/register-user.dto';
-import { LoginUserDto } from './dto/login-user.dto';
 import { User } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { ConfigService } from 'src/config/config.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { UsersService } from 'src/users/users.service';
+import { RegisterUserDto } from './dto/register-user.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private notificationsService: NotificationsService,
+    private configService: ConfigService,
   ) {}
 
   async register(registerUserDto: RegisterUserDto) {
@@ -19,7 +22,6 @@ export class AuthService {
       ...registerUserDto,
       password: hashedPassword,
     });
-    // Remove a senha antes de retornar
     const { password, ...result } = user;
     return result;
   }
@@ -42,7 +44,99 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-      }, // Retorna dados do usuário sem a senha
+      },
     };
+  }
+
+  private buildPasswordResetFingerprint(passwordHash: string) {
+    return passwordHash.slice(-12);
+  }
+
+  private buildResetUrl(token: string) {
+    const frontendUrl =
+      this.configService.frontendUrl || 'https://www.bymkcloset.com.br';
+    return `${frontendUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  async requestPasswordReset(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (!user) {
+      return {
+        ok: true,
+        message:
+          'Se existir uma conta com este e-mail, enviaremos as instrucoes de recuperacao.',
+      };
+    }
+
+    const token = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+        purpose: 'password-reset',
+        fp: this.buildPasswordResetFingerprint(user.password),
+      },
+      {
+        secret: this.configService.jwtSecret,
+        expiresIn: '30m',
+      },
+    );
+
+    await this.notificationsService.sendPasswordResetEmail(
+      user.email,
+      this.buildResetUrl(token),
+      user.name,
+    );
+
+    return {
+      ok: true,
+      message:
+        'Se existir uma conta com este e-mail, enviaremos as instrucoes de recuperacao.',
+    };
+  }
+
+  async resetPassword(token: string, password: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        email: string;
+        purpose: string;
+        fp: string;
+      }>(token, {
+        secret: this.configService.jwtSecret,
+      });
+
+      if (payload.purpose !== 'password-reset') {
+        throw new BadRequestException(
+          'Token invalido para redefinicao de senha.',
+        );
+      }
+
+      const user = await this.usersService.findByEmail(payload.email);
+      if (!user || user.id !== payload.sub) {
+        throw new BadRequestException('Token invalido ou expirado.');
+      }
+
+      if (
+        this.buildPasswordResetFingerprint(user.password) !== payload.fp
+      ) {
+        throw new BadRequestException('Token invalido ou expirado.');
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await this.usersService.update(user.id, { password: hashedPassword });
+
+      return {
+        ok: true,
+        message: 'Senha redefinida com sucesso.',
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException('Token invalido ou expirado.');
+    }
   }
 }
