@@ -15,6 +15,7 @@ import { NotificationsService } from 'src/notifications/notifications.service'; 
 import { ShippingService } from 'src/shipping/shipping.service';
 import { CartItemForShipping } from 'src/shipping/dto/calculate-shipping.dto';
 import {
+  getCreditCardFeeAmount,
   getPixFeeAmount,
   getShippingPriceForPayment,
 } from './pix-pricing.util';
@@ -394,6 +395,13 @@ export class OrdersService {
     }
 
     // 5. Criar o pedido na transação
+    const baseOrderTotal = totalAmount.plus(parsedShippingPrice);
+    const paymentMethodFeeAmount =
+      paymentMethod === 'CREDIT_CARD'
+        ? new Prisma.Decimal(getCreditCardFeeAmount(baseOrderTotal.toNumber()))
+        : new Prisma.Decimal(0);
+    const finalOrderTotal = baseOrderTotal.plus(paymentMethodFeeAmount);
+
     const customerProfile = finalUserId
       ? await this.usersService.findOne(finalUserId)
       : null;
@@ -427,6 +435,8 @@ export class OrdersService {
     paymentDetailsSnapshot.shippingPrice = Number(parsedShippingPrice);
     paymentDetailsSnapshot.shippingBasePrice = baseShippingPrice;
     paymentDetailsSnapshot.pixFeeAmount = pixFeeAmount;
+    paymentDetailsSnapshot.paymentMethodFeeAmount =
+      paymentMethodFeeAmount.toNumber();
 
     const order = await this.prisma.$transaction(async (prisma) => {
       // Criar o pedido
@@ -441,7 +451,7 @@ export class OrdersService {
           guestCpf: finalUserId ? undefined : guestContactInfo?.cpf, // Adicionado guestCpf
 
           status: OrderStatus.PENDING,
-          totalAmount: totalAmount.plus(parsedShippingPrice),
+          totalAmount: finalOrderTotal,
           shippingPrice: parsedShippingPrice,
           paymentMethod, // O paymentMethod do CreateOrderDto será salvo aqui
           paymentDetails:
