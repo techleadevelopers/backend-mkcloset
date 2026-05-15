@@ -59,6 +59,14 @@ export class AuthService {
     if (!trimmed) {
       return 'https://www.bymkcloset.com.br';
     }
+    const normalizedForCheck = trimmed.toLowerCase();
+    if (
+      normalizedForCheck.includes('localhost') ||
+      normalizedForCheck.includes('127.0.0.1') ||
+      normalizedForCheck.includes('0.0.0.0')
+    ) {
+      return 'https://www.bymkcloset.com.br';
+    }
     if (/^https?:\/\//i.test(trimmed)) {
       return trimmed;
     }
@@ -69,7 +77,9 @@ export class AuthService {
     const frontendUrl = this.normalizeFrontendUrl(
       this.configService.frontendUrl || 'https://www.bymkcloset.com.br',
     );
-    return `${frontendUrl}/login?mode=reset-password&token=${encodeURIComponent(token)}`;
+    const resetUrl = `${frontendUrl}/login?mode=reset-password&token=${encodeURIComponent(token)}`;
+    this.logger.log(`[forgot-password] reset url generated: ${resetUrl}`);
+    return resetUrl;
   }
 
   async requestPasswordReset(email: string) {
