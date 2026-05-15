@@ -8,6 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
 import { ConfigModule } from 'src/config/config.module';
 import { PrismaModule } from 'src/prisma/prisma.module'; // Importe do pacote oficial
+import { NotificationsModule } from 'src/notifications/notifications.module';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -19,6 +20,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     NestConfigModule,
     ConfigModule,
     PrismaModule,
+    NotificationsModule,
     JwtModule.registerAsync({
       // Importa o ConfigModule aqui para que o useFactory tenha acesso ao ConfigService
       imports: [NestConfigModule],
