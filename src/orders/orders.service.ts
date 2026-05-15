@@ -14,6 +14,10 @@ import { ProductEntity } from 'src/products/entities/product.entity';
 import { NotificationsService } from 'src/notifications/notifications.service'; // NOVO: Importe o serviço de notificações
 import { ShippingService } from 'src/shipping/shipping.service';
 import { CartItemForShipping } from 'src/shipping/dto/calculate-shipping.dto';
+import {
+  getPixFeeAmount,
+  getShippingPriceForPayment,
+} from './pix-pricing.util';
 
 // Opcional: Tipo para o pedido com as relações que esperamos carregar
 // Isso ajuda o TypeScript a entender a estrutura do objeto 'order'
@@ -333,6 +337,8 @@ export class OrdersService {
     // 4. Recalcular o frete no backend para não confiar no valor enviado pelo frontend
     let resolvedShippingService = shippingService;
     let parsedShippingPrice: Prisma.Decimal;
+    let baseShippingPrice = 0;
+    let pixFeeAmount = 0;
 
     if (isTestPixOrder) {
       if (
@@ -351,6 +357,7 @@ export class OrdersService {
       }
 
       resolvedShippingService = shippingService;
+      baseShippingPrice = TEST_PIX_SHIPPING_PRICE;
       parsedShippingPrice = new Prisma.Decimal(TEST_PIX_SHIPPING_PRICE);
     } else {
       const shippingZipCode = finalShippingAddressData.zipCode;
@@ -369,13 +376,21 @@ export class OrdersService {
         );
       }
 
-      if (Math.abs(selectedShippingOption.price - shippingPrice) > 0.01) {
+      const expectedShippingPrice = getShippingPriceForPayment(
+        selectedShippingOption.price,
+        paymentMethod,
+      );
+
+      if (Math.abs(expectedShippingPrice - shippingPrice) > 0.01) {
         throw new BadRequestException(
           'O valor do frete foi atualizado. Recalcule o frete antes de finalizar o pedido.',
         );
       }
 
-      parsedShippingPrice = new Prisma.Decimal(selectedShippingOption.price);
+      baseShippingPrice = selectedShippingOption.price;
+      pixFeeAmount =
+        paymentMethod === 'PIX' ? getPixFeeAmount(selectedShippingOption.price) : 0;
+      parsedShippingPrice = new Prisma.Decimal(expectedShippingPrice);
     }
 
     // 5. Criar o pedido na transação
@@ -410,6 +425,8 @@ export class OrdersService {
     };
     paymentDetailsSnapshot.shippingService = resolvedShippingService;
     paymentDetailsSnapshot.shippingPrice = Number(parsedShippingPrice);
+    paymentDetailsSnapshot.shippingBasePrice = baseShippingPrice;
+    paymentDetailsSnapshot.pixFeeAmount = pixFeeAmount;
 
     const order = await this.prisma.$transaction(async (prisma) => {
       // Criar o pedido
