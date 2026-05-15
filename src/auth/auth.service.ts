@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -9,6 +9,8 @@ import { RegisterUserDto } from './dto/register-user.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -60,9 +62,15 @@ export class AuthService {
 
   async requestPasswordReset(email: string) {
     const normalizedEmail = email.trim().toLowerCase();
+    this.logger.log(
+      `[forgot-password] request received for ${normalizedEmail}`,
+    );
     const user = await this.usersService.findByEmail(normalizedEmail);
 
     if (!user) {
+      this.logger.warn(
+        `[forgot-password] no user found for ${normalizedEmail}`,
+      );
       return {
         ok: true,
         message:
@@ -83,10 +91,19 @@ export class AuthService {
       },
     );
 
+    const resetUrl = this.buildResetUrl(token);
+    this.logger.log(
+      `[forgot-password] user found ${user.id} (${user.email}), sending reset email`,
+    );
+
     await this.notificationsService.sendPasswordResetEmail(
       user.email,
-      this.buildResetUrl(token),
+      resetUrl,
       user.name,
+    );
+
+    this.logger.log(
+      `[forgot-password] reset email successfully requested for ${user.email}`,
     );
 
     return {
@@ -98,6 +115,7 @@ export class AuthService {
 
   async resetPassword(token: string, password: string) {
     try {
+      this.logger.log('[reset-password] token validation started');
       const payload = await this.jwtService.verifyAsync<{
         sub: string;
         email: string;
@@ -126,12 +144,18 @@ export class AuthService {
 
       const hashedPassword = await bcrypt.hash(password, 10);
       await this.usersService.update(user.id, { password: hashedPassword });
+      this.logger.log(
+        `[reset-password] password updated for ${user.id} (${user.email})`,
+      );
 
       return {
         ok: true,
         message: 'Senha redefinida com sucesso.',
       };
     } catch (error) {
+      this.logger.error(
+        `[reset-password] failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       if (error instanceof BadRequestException) {
         throw error;
       }
