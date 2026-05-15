@@ -54,10 +54,22 @@ export class AuthService {
     return passwordHash.slice(-12);
   }
 
+  private normalizeFrontendUrl(url: string) {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (!trimmed) {
+      return 'https://www.bymkcloset.com.br';
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  }
+
   private buildResetUrl(token: string) {
-    const frontendUrl =
-      this.configService.frontendUrl || 'https://www.bymkcloset.com.br';
-    return `${frontendUrl.replace(/\/+$/, '')}/login?mode=reset-password&token=${encodeURIComponent(token)}`;
+    const frontendUrl = this.normalizeFrontendUrl(
+      this.configService.frontendUrl || 'https://www.bymkcloset.com.br',
+    );
+    return `${frontendUrl}/login?mode=reset-password&token=${encodeURIComponent(token)}`;
   }
 
   async requestPasswordReset(email: string) {
