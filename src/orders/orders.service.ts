@@ -49,7 +49,6 @@ const TEST_PIX_PRODUCT_PREFIX = '[TESTE PIX]';
 const TEST_PIX_SHIPPING_SERVICE = 'TEST_PIX_FREE';
 const TEST_PIX_SHIPPING_PRICE = 0.5;
 const TEST_PIX_ALLOWED_SHIPPING_SERVICES = ['40010', '04014', '41106', '04510'];
-const TEST_PIX_ALLOWED_SHIPPING_SERVICES = ['40010', '41106'];
 
 @Injectable()
 export class OrdersService {
@@ -337,8 +336,8 @@ export class OrdersService {
 
     if (isTestPixOrder) {
       if (
-        shippingService &&
-        shippingService !== TEST_PIX_SHIPPING_SERVICE
+        !shippingService ||
+        !TEST_PIX_ALLOWED_SHIPPING_SERVICES.includes(shippingService)
       ) {
         throw new BadRequestException(
           'Esse produto de teste deve usar o frete interno de homologação.',
@@ -351,7 +350,7 @@ export class OrdersService {
         );
       }
 
-      resolvedShippingService = TEST_PIX_SHIPPING_SERVICE;
+      resolvedShippingService = shippingService;
       parsedShippingPrice = new Prisma.Decimal(TEST_PIX_SHIPPING_PRICE);
     } else {
       const shippingZipCode = finalShippingAddressData.zipCode;
@@ -409,6 +408,8 @@ export class OrdersService {
       zipCode: finalShippingAddressData.zipCode,
       cep: finalShippingAddressData.zipCode,
     };
+    paymentDetailsSnapshot.shippingService = resolvedShippingService;
+    paymentDetailsSnapshot.shippingPrice = Number(parsedShippingPrice);
 
     const order = await this.prisma.$transaction(async (prisma) => {
       // Criar o pedido
