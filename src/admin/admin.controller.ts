@@ -18,11 +18,34 @@ class UpdateAntifraudStatusDto {
 }
 
 class UpdateOrderStatusDto {
+  @IsIn([
+    OrderStatus.PENDING,
+    OrderStatus.PAID,
+    OrderStatus.SHIPPED,
+    OrderStatus.DELIVERED,
+    OrderStatus.CANCELLED,
+    OrderStatus.REFUNDED,
+  ])
   status: OrderStatus;
+
+  @IsOptional()
+  @IsString()
   carrier?: string;
+
+  @IsOptional()
+  @IsString()
   postedAt?: string;
+
+  @IsOptional()
+  @IsString()
   trackingCode?: string;
+
+  @IsOptional()
+  @IsString()
   trackingUrl?: string;
+
+  @IsOptional()
+  @IsIn(['PROCESSING'])
   notifyStage?: 'PROCESSING';
 }
 
