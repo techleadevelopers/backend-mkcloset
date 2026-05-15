@@ -257,4 +257,39 @@ export class NotificationsService {
     );
     await this.sendEmail(to, subject, html);
   }
+
+  async sendPasswordResetEmail(
+    to: string,
+    resetUrl: string,
+    customerName?: string | null,
+  ): Promise<void> {
+    const subject = 'Redefinicao de senha - MK Closet';
+    const html = this.buildLayout(
+      'Recuperacao de senha',
+      `${this.greeting(customerName)} recebemos uma solicitacao para redefinir sua senha.`,
+      `
+        <p style="margin:0 0 14px;font-size:15px;line-height:1.6;">
+          Para criar uma nova senha, clique no botao abaixo:
+        </p>
+        <p style="margin:0 0 18px;">
+          <a
+            href="${resetUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;"
+          >
+            Redefinir senha
+          </a>
+        </p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.7;color:#4b5563;">
+          Se preferir, copie e cole este link no navegador:
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.7;word-break:break-word;color:#6b7280;">
+          ${resetUrl}
+        </p>
+      `,
+      'Se voce nao pediu a redefinicao, pode ignorar este e-mail com seguranca.',
+    );
+    await this.sendEmail(to, subject, html);
+  }
 }
