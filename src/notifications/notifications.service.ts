@@ -263,6 +263,9 @@ export class NotificationsService {
     resetUrl: string,
     customerName?: string | null,
   ): Promise<void> {
+    this.logger.log(
+      `[password-reset-email] preparing reset email to ${to}`,
+    );
     const subject = 'Redefinicao de senha - MK Closet';
     const html = this.buildLayout(
       'Recuperacao de senha',
@@ -291,5 +294,8 @@ export class NotificationsService {
       'Se voce nao pediu a redefinicao, pode ignorar este e-mail com seguranca.',
     );
     await this.sendEmail(to, subject, html);
+    this.logger.log(
+      `[password-reset-email] reset email sent to ${to}`,
+    );
   }
 }
