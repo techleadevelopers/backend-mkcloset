@@ -11,6 +11,9 @@ import {
 import { AppConstants } from 'src/common/constants/app.constants';
 import axios from 'axios'; // Instale: npm install axios
 
+const TEST_PIX_PRODUCT_PREFIX = '[TESTE PIX]';
+const TEST_PIX_SHIPPING_PRICE = 0.5;
+
 @Injectable()
 export class ShippingService {
   constructor(private configService: ConfigService) {}
@@ -19,6 +22,11 @@ export class ShippingService {
     dto: CalculateShippingDto,
   ): Promise<CorreiosResponse> {
     const { zipCode, items } = dto;
+    const isTestPixOrder =
+      items.length > 0 &&
+      items.every((item) =>
+        (item.product.name ?? '').trim().toUpperCase().startsWith(TEST_PIX_PRODUCT_PREFIX),
+      );
 
     if (!zipCode || zipCode.replace(/\D/g, '').length !== 8) {
       throw new BadRequestException(
@@ -139,20 +147,35 @@ export class ShippingService {
       destinationState === AppConstants.FREE_SHIPPING_STATE &&
       packageInfo.value >= AppConstants.FREE_SHIPPING_THRESHOLD;
 
-    const options: ShippingOption[] = [
-      {
-        service: '40010',
-        serviceName: 'SEDEX',
-        price: isEligibleForFreeShipping ? 0 : parseFloat(sedexPrice.toFixed(2)),
-        deliveryTime: sedexTime,
-      },
-      {
-        service: '41106',
-        serviceName: 'PAC',
-        price: isEligibleForFreeShipping ? 0 : parseFloat(pacPrice.toFixed(2)),
-        deliveryTime: pacTime,
-      },
-    ];
+    const options: ShippingOption[] = isTestPixOrder
+      ? [
+          {
+            service: '40010',
+            serviceName: 'SEDEX',
+            price: TEST_PIX_SHIPPING_PRICE,
+            deliveryTime: sedexTime,
+          },
+          {
+            service: '41106',
+            serviceName: 'PAC',
+            price: TEST_PIX_SHIPPING_PRICE,
+            deliveryTime: pacTime,
+          },
+        ]
+      : [
+          {
+            service: '40010',
+            serviceName: 'SEDEX',
+            price: isEligibleForFreeShipping ? 0 : parseFloat(sedexPrice.toFixed(2)),
+            deliveryTime: sedexTime,
+          },
+          {
+            service: '41106',
+            serviceName: 'PAC',
+            price: isEligibleForFreeShipping ? 0 : parseFloat(pacPrice.toFixed(2)),
+            deliveryTime: pacTime,
+          },
+        ];
 
     return {
       zipCode: cleanZip,
