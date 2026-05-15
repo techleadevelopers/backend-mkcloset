@@ -57,7 +57,7 @@ export class AuthService {
   private buildResetUrl(token: string) {
     const frontendUrl =
       this.configService.frontendUrl || 'https://www.bymkcloset.com.br';
-    return `${frontendUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+    return `${frontendUrl.replace(/\/+$/, '')}/login?mode=reset-password&token=${encodeURIComponent(token)}`;
   }
 
   async requestPasswordReset(email: string) {
